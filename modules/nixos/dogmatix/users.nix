@@ -16,7 +16,15 @@ let
   #     asterix (tmopro18's), not asterix's own identity
   #   - the key in hosts/nixos/default.nix — the dustinlyons starter
   #     template's, and a third party's
-  keys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPmxkJJ/WnwVmYdvylfvp4D+qOAcNMQ/gzFLGkPXVVJ5" ];
+  # Two entry points on purpose: this is a headless box with SSH password
+  # auth disabled, so a single key is a single point of lockout.
+  keys = [
+    # "Asterix Identity" — the M5 Pro Mac workstation.
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPmxkJJ/WnwVmYdvylfvp4D+qOAcNMQ/gzFLGkPXVVJ5"
+    # tmopro18 — the 2018 MBP. Second way in if asterix or 1Password is
+    # unavailable. Taken from asterix's ~/.ssh/authorized_keys.
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII80FjrMxHj4v1vIH5i8HGplMAVeNvMyMWocjrBIWRhH"
+  ];
 in
 {
   users.users = {
@@ -26,23 +34,10 @@ in
       shell = pkgs.zsh;
       openssh.authorizedKeys.keys = keys;
 
-      # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      # !!!  INSECURE PLACEHOLDER — CHANGE THIS ON FIRST CONSOLE LOGIN.   !!!
-      # !!!                                                              !!!
-      # !!!  This password exists ONLY so the machine is usable at the    !!!
-      # !!!  physical console (and for sudo) before SSH works. It is      !!!
-      # !!!  stored in PLAINTEXT in the world-readable nix store, so it   !!!
-      # !!!  is effectively public.                                      !!!
-      # !!!                                                              !!!
-      # !!!  On first boot:   passwd tapani                              !!!
-      # !!!  Then replace this line with a hash:                          !!!
-      # !!!      mkpasswd -m yescrypt                                     !!!
-      # !!!      initialHashedPassword = "$y$...";                        !!!
-      # !!!  (initialPassword/initialHashedPassword only apply when the   !!!
-      # !!!   account is first created, so `passwd` is not undone by a    !!!
-      # !!!   later rebuild — but leaving this here is still bad.)        !!!
-      # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      initialPassword = "changeme";
+      # yescrypt hash, safe to commit — it is a hash, not the password.
+      # Applies only at account creation; `passwd tapani` afterwards is not
+      # undone by a later rebuild.
+      initialHashedPassword = "$y$j9T$YevMrl0WUC7YtrDDWmPfz.$EDUz9VrFjcBkl6bBfpRAYMcq201TKxlr.Get6D/gQB9";
     };
 
     root.openssh.authorizedKeys.keys = keys;

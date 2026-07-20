@@ -59,6 +59,13 @@
 
   environment.systemPackages = pkgs.callPackage ./packages.nix { };
 
-  # Don't change this — it tracks the initial version installed.
-  system.stateVersion = "26.05";
+  # Tracks the initial version installed. Must match the nixpkgs this flake
+  # actually builds against, NOT the version of the installer ISO — the ISO is
+  # only an environment to run nixos-install from.
+  #
+  # flake.lock pins nixos-unstable to a 2025-05-08 snapshot, which is 25.05.
+  # Verify before changing:
+  #   nix eval .#nixosConfigurations.dogmatix.config.system.build.toplevel.drvPath
+  # Bump only alongside a deliberate `nix flake update nixpkgs`.
+  system.stateVersion = "25.05";
 }
