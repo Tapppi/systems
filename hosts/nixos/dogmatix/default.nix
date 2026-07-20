@@ -7,10 +7,12 @@
 
 let
   user = "tapani";
-  # PLACEHOLDER — this is the key already used by hosts/nixos/default.nix.
-  # Confirm it is the key you actually hold before installing; without a valid
-  # entry here the machine is unreachable, as password auth is disabled below.
-  keys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOk8iAnIaa1deoc7jw8YACPNVka1ZFJxhnU4G74TmS+p" ];
+  # Taken from ~/.ssh/authorized_keys on asterix. Password auth is disabled
+  # below, so this key is the only way in — verify it before installing.
+  #
+  # NOTE: hosts/nixos/default.nix still carries the dustinlyons starter
+  # template's key, which is a third party's. Do not copy it here.
+  keys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII80FjrMxHj4v1vIH5i8HGplMAVeNvMyMWocjrBIWRhH" ];
 in
 {
   imports = [
