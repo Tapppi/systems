@@ -1,20 +1,11 @@
-# PLACEHOLDER hardware configuration for dogmatix.
+# Hardware configuration for dogmatix.
 #
-# !!! THIS FILE IS NOT REAL HARDWARE DETECTION OUTPUT !!!
+# Filesystems and partitioning are declared in modules/nixos/dogmatix/disko.nix,
+# not here — disko generates the fileSystems entries.
 #
-# The filesystem entries below use *labels*, not the real device UUIDs, because
-# the machine has never been booted with this config and no UUIDs are known.
-# Replace this whole file with the output of:
-#
-#   nixos-generate-config --root /mnt --show-hardware-config
-#
-# run from the NixOS installer after partitioning, then commit the result.
-#
-# If you instead keep this file as-is, you MUST label the partitions to match
-# during installation:
-#
-#   mkfs.fat -F32 -n NIXOS_BOOT /dev/<esp>
-#   mkfs.ext4 -L NIXOS_ROOT /dev/<root>
+# The kernel module lists below are hand-written for Alder Lake-N and have not
+# been checked against real detection output. Compare against
+# `nixos-generate-config --show-hardware-config` on the machine once it boots.
 { lib, modulesPath, ... }:
 
 {
@@ -35,20 +26,22 @@
   boot.kernelModules = [ "kvm-intel" ];
   boot.extraModulePackages = [ ];
 
-  # PLACEHOLDER — replace with real by-uuid paths from nixos-generate-config.
+  # mkDefault so the image builders (config.system.build.images.*) can override
+  # these with their own generated layout. These values apply to a normal
+  # install, where the partitions must carry the matching labels:
+  #   mkfs.fat -F32 -n NIXOS_BOOT /dev/<esp>
+  #   mkfs.ext4 -L NIXOS_ROOT /dev/<root>
   fileSystems."/" = {
-    device = "/dev/disk/by-label/NIXOS_ROOT";
-    fsType = "ext4";
+    device = lib.mkDefault "/dev/disk/by-label/NIXOS_ROOT";
+    fsType = lib.mkDefault "ext4";
   };
 
   fileSystems."/boot" = {
-    device = "/dev/disk/by-label/NIXOS_BOOT";
-    fsType = "vfat";
-    options = [ "fmask=0077" "dmask=0077" ];
+    device = lib.mkDefault "/dev/disk/by-label/NIXOS_BOOT";
+    fsType = lib.mkDefault "vfat";
+    options = lib.mkDefault [ "fmask=0077" "dmask=0077" ];
   };
 
-  # The 128GB boot drive is small; a swapfile is likely wanted once the real
-  # layout is known. Left empty deliberately.
   swapDevices = [ ];
 
   nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
