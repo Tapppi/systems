@@ -90,7 +90,10 @@
       in
         darwin.lib.darwinSystem {
           inherit system;
-          specialArgs = inputs;
+          # Spread the inputs as individual module args (upstream starter's
+          # convention) *and* expose the whole set as `inputs`, which the
+          # home-manager modules take as an argument.
+          specialArgs = inputs // { inherit inputs; };
           modules = [
             home-manager.darwinModules.home-manager
             nix-homebrew.darwinModules.nix-homebrew
@@ -114,7 +117,7 @@
 
       nixosConfigurations = nixpkgs.lib.genAttrs linuxSystems (system: nixpkgs.lib.nixosSystem {
         inherit system;
-        specialArgs = inputs;
+        specialArgs = inputs // { inherit inputs; };
         modules = [
           disko.nixosModules.disko
           home-manager.nixosModules.home-manager {
@@ -132,7 +135,7 @@
         # are the upstream starter's untested desktop placeholder.
         dogmatix = nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
-          specialArgs = inputs;
+          specialArgs = inputs // { inherit inputs; };
           modules = [ ./hosts/nixos/dogmatix ];
         };
       };
