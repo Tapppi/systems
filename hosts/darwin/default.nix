@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ config, pkgs, lib, ... }:
 
 let user = "tapani"; in
 
@@ -26,12 +26,55 @@ let user = "tapani"; in
   # up it can act as its own native remote builder.
   nix.enable = false;
 
+  # `nix.enable = false` also stops nix-darwin writing /etc/nix/machines, so
+  # nix.buildMachines (populated by nix-rosetta-builder) would be configured
+  # but never registered, and the builder would sit unused. Determinate's
+  # nix.conf does read `builders = @/etc/nix/machines`, so re-render that file
+  # ourselves.
+  #
+  # This mirrors nix-darwin's own renderer in modules/nix/default.nix
+  # ("List of machines for distributed Nix builds in the format expected by
+  # build-remote.pl") field-for-field:
+  #   protocol://sshUser@host  systems  sshKey  maxJobs  speedFactor \
+  #   supportedFeatures+mandatoryFeatures  mandatoryFeatures  publicHostKey
+  # with "-" standing in for every unset field. Keep in sync if nix-darwin
+  # changes it; drop this whole block if nix.enable ever goes back to true.
+  environment.etc."nix/machines" =
+    lib.mkIf (config.nix.buildMachines != [ ]) {
+      text = lib.concatMapStrings
+        (machine: (lib.concatStringsSep " " [
+          ("${lib.optionalString (machine.protocol != null) "${machine.protocol}://"}"
+            + "${lib.optionalString (machine.sshUser != null) "${machine.sshUser}@"}"
+            + machine.hostName)
+          (if machine.system != null then machine.system
+           else if machine.systems != [ ] then lib.concatStringsSep "," machine.systems
+           else "-")
+          (if machine.sshKey != null then machine.sshKey else "-")
+          (toString machine.maxJobs)
+          (toString machine.speedFactor)
+          (let res = machine.supportedFeatures ++ machine.mandatoryFeatures;
+           in if res == [ ] then "-" else lib.concatStringsSep "," res)
+          (let res = machine.mandatoryFeatures;
+           in if res == [ ] then "-" else lib.concatStringsSep "," res)
+          (if machine.publicHostKey != null then machine.publicHostKey else "-")
+        ]) + "\n")
+        config.nix.buildMachines;
+    };
+
   # Determinate leaves nix.custom.conf for user settings and does not
   # overwrite it, so it can be managed declaratively from here even though
   # nix.conf itself cannot.
   environment.etc."nix/nix.custom.conf".text = ''
     # Managed by nix-darwin. Determinate Nix owns nix.conf and !includes this.
     auto-optimise-store = true
+
+    # `builders` defaults to `@/etc/nix/machines` in Nix itself (verified via
+    # `nix config show --json`: value == defaultValue), so rendering that file
+    # above is all that is needed to register the builder — nothing has to be
+    # set here for it, and it does not depend on Determinate. This one line
+    # just lets the builder fetch from binary caches itself rather than
+    # round-tripping every path via this Mac.
+    builders-use-substitutes = true
 
     # Disk-pressure GC: collect once free space drops below min-free, freeing
     # up to max-free. Note this only removes unreachable paths — old profile
