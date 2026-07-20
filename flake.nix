@@ -127,6 +127,14 @@
           }
           ./hosts/nixos
         ];
-     });
+     }) // {
+        # Real machines, keyed by hostname. The per-architecture entries above
+        # are the upstream starter's untested desktop placeholder.
+        dogmatix = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = inputs;
+          modules = [ ./hosts/nixos/dogmatix ];
+        };
+      };
   };
 }
