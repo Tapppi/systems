@@ -8,24 +8,34 @@ let user = "tapani"; in
     ../../modules/shared
   ];
 
-  nix = {
-    package = pkgs.nix;
+  # Determinate Nix owns the daemon and /etc/nix/nix.conf — that file's own
+  # header says "do not modify! this file will be replaced!". So nix-darwin
+  # must not try to manage Nix, or the two fight over it.
+  #
+  # Consequence: everything under `nix.*` is inert, including `nix.gc`.
+  # Determinate does NOT garbage collect by default (min-free = 0,
+  # max-free = maxint, auto-optimise-store = false), so the store would grow
+  # unbounded. GC is reinstated declaratively via launchd below — nix.enable
+  # only disables nix-darwin's *Nix* management, not its launchd management.
+  #
+  # Disk-pressure GC and store dedup are nix.conf settings and cannot be set
+  # from here; they go in /etc/nix/nix.custom.conf, the file Determinate
+  # leaves for user settings and does not overwrite:
+  #   auto-optimise-store = true
+  #   min-free = 10737418240    # 10 GiB — collect when free space drops below
+  #   max-free = 53687091200    # 50 GiB — collect up to this much
+  nix.enable = false;
 
-    settings = {
-      trusted-users = [ "@admin" "${user}" ];
-      substituters = [ "https://nix-community.cachix.org" "https://cache.nixos.org" ];
-      trusted-public-keys = [ "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=" ];
-    };
-
-    gc = {
-      automatic = true;
-      interval = { Weekday = 0; Hour = 2; Minute = 0; };
-      options = "--delete-older-than 30d";
-    };
-
-    extraOptions = ''
-      experimental-features = nix-command flakes
+  # Replaces the old `nix.gc` block, which nix.enable = false made inert.
+  # Sundays at 02:00, same schedule and retention as before.
+  launchd.daemons.nix-gc = {
+    script = ''
+      exec /nix/var/nix/profiles/default/bin/nix-collect-garbage --delete-older-than 30d
     '';
+    serviceConfig = {
+      RunAtLoad = false;
+      StartCalendarInterval = [{ Weekday = 0; Hour = 2; Minute = 0; }];
+    };
   };
 
   system.checks.verifyNixPath = false;
