@@ -38,9 +38,16 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.nixCats.follows = "nixCats";
     };
+    # Rosetta 2-backed Linux builder: aarch64-linux natively, x86_64-linux via
+    # Rosetta rather than QEMU. Used instead of nix-darwin's built-in
+    # nix.linux-builder, which asserts on nix.enable and only emulates x86.
+    nix-rosetta-builder = {
+      url = "github:cpick/nix-rosetta-builder";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, darwin, nix-homebrew, homebrew-bundle, homebrew-core, homebrew-cask, home-manager, nixpkgs, disko, nixCats, nvim } @inputs:
+  outputs = { self, darwin, nix-homebrew, homebrew-bundle, homebrew-core, homebrew-cask, home-manager, nixpkgs, disko, nixCats, nvim, nix-rosetta-builder } @inputs:
     let
       user = "tapani";
       linuxSystems = [ "x86_64-linux" "aarch64-linux" ];
@@ -97,6 +104,7 @@
           modules = [
             home-manager.darwinModules.home-manager
             nix-homebrew.darwinModules.nix-homebrew
+            inputs.nix-rosetta-builder.darwinModules.default
             {
               nix-homebrew = {
                 inherit user;
