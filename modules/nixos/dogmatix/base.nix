@@ -62,5 +62,9 @@
   # Tracks the initial version installed. Must not exceed the nixpkgs this
   # flake builds against — verify with:
   #   nix eval .#nixosConfigurations.dogmatix.config.system.build.toplevel.drvPath
-  system.stateVersion = "26.05";
+  #
+  # 26.11 matches the locked nixos-unstable (26.11-dev). Note the installer ISO
+  # is 26.05 — that is fine and irrelevant, the ISO is only an environment to
+  # run nixos-install from; the system built is whatever this flake says.
+  system.stateVersion = "26.11";
 }
