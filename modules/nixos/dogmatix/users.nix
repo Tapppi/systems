@@ -2,13 +2,21 @@
 { pkgs, ... }:
 
 let
-  # Taken from ~/.ssh/authorized_keys on asterix. Password auth over SSH is
-  # disabled in ssh.nix, so this key is the only way in remotely — verify it
-  # before installing.
+  # "Asterix Identity" — asterix's own SSH identity, held in the 1Password
+  # agent. Password auth over SSH is disabled in ssh.nix, so this key is the
+  # only way in remotely.
   #
-  # NOTE: hosts/nixos/default.nix still carries the dustinlyons starter
-  # template's key, which is a third party's. Do not copy it here.
-  keys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII80FjrMxHj4v1vIH5i8HGplMAVeNvMyMWocjrBIWRhH" ];
+  # To retrieve it again, note that ssh-add ignores IdentityAgent from
+  # ssh_config and only honours $SSH_AUTH_SOCK:
+  #   SSH_AUTH_SOCK="$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock" ssh-add -L
+  #
+  # Do NOT use, despite both looking plausible:
+  #   - "Asterix Git Sign" — commit signing key, not for auth
+  #   - the key in ~/.ssh/authorized_keys — that is a key allowed *into*
+  #     asterix (tmopro18's), not asterix's own identity
+  #   - the key in hosts/nixos/default.nix — the dustinlyons starter
+  #     template's, and a third party's
+  keys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPmxkJJ/WnwVmYdvylfvp4D+qOAcNMQ/gzFLGkPXVVJ5" ];
 in
 {
   users.users = {
