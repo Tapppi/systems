@@ -18,16 +18,32 @@ let user = "tapani"; in
   # unbounded. GC is reinstated declaratively via launchd below — nix.enable
   # only disables nix-darwin's *Nix* management, not its launchd management.
   #
-  # Disk-pressure GC and store dedup are nix.conf settings and cannot be set
-  # from here; they go in /etc/nix/nix.custom.conf, the file Determinate
-  # leaves for user settings and does not overwrite:
-  #   auto-optimise-store = true
-  #   min-free = 10737418240    # 10 GiB — collect when free space drops below
-  #   max-free = 53687091200    # 50 GiB — collect up to this much
+  # Note `nix.linux-builder` is unavailable while this is false — nix-darwin
+  # asserts `nix.linux-builder.enable requires nix.enable`. Determinate's own
+  # native Linux builder is gated behind a FlakeHub account plus manual access
+  # approval, so neither is usable today. Accepted: dogmatix is x86_64-linux,
+  # which a builder here would have to emulate via QEMU anyway, and once it is
+  # up it can act as its own native remote builder.
   nix.enable = false;
 
-  # Replaces the old `nix.gc` block, which nix.enable = false made inert.
-  # Sundays at 02:00, same schedule and retention as before.
+  # Determinate leaves nix.custom.conf for user settings and does not
+  # overwrite it, so it can be managed declaratively from here even though
+  # nix.conf itself cannot.
+  environment.etc."nix/nix.custom.conf".text = ''
+    # Managed by nix-darwin. Determinate Nix owns nix.conf and !includes this.
+    auto-optimise-store = true
+
+    # Disk-pressure GC: collect once free space drops below min-free, freeing
+    # up to max-free. Note this only removes unreachable paths — old profile
+    # generations are GC roots, so this does NOT prune them. That is why the
+    # scheduled nix-collect-garbage below still exists.
+    min-free = ${toString (10 * 1024 * 1024 * 1024)}
+    max-free = ${toString (50 * 1024 * 1024 * 1024)}
+  '';
+
+  # Replaces the old `nix.gc` block, which nix.enable = false makes inert.
+  # Not redundant with min-free/max-free above: only --delete-older-than
+  # prunes old generations. Sundays at 02:00, same retention as before.
   launchd.daemons.nix-gc = {
     script = ''
       exec /nix/var/nix/profiles/default/bin/nix-collect-garbage --delete-older-than 30d
