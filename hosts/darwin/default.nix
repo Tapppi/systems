@@ -30,6 +30,10 @@ let user = "tapani"; in
 
   system.checks.verifyNixPath = false;
 
+  # nix-darwin now activates system-wide as root; user-scoped options
+  # (homebrew, system.defaults.*) apply to system.primaryUser instead.
+  system.primaryUser = user;
+
   environment.systemPackages = with pkgs; [ ]
     ++ (import ../../modules/shared/packages.nix { inherit pkgs; });
 

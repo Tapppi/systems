@@ -48,19 +48,22 @@ in
           wantURIs = concatMapStrings
             (entry: "${entryURI entry.path}\n")
             cfg.entries;
-          createEntries = concatMapStrings
-            (entry: "${dockutil}/bin/dockutil --no-restart --add '${entry.path}' --section ${entry.section} ${entry.options}\n")
-            cfg.entries;
         in
         {
-          system.activationScripts.postUserActivation.text = ''
+          # nix-darwin removed the user activation scripts; everything runs as
+          # root now, so drop back to the primary user for the dock, which is
+          # per-user state.
+          system.activationScripts.postActivation.text = ''
             echo >&2 "Setting up the Dock..."
-            haveURIs="$(${dockutil}/bin/dockutil --list | ${pkgs.coreutils}/bin/cut -f2)"
+            asUser() { /usr/bin/sudo --user=${config.system.primaryUser} -- "$@"; }
+            haveURIs="$(asUser ${dockutil}/bin/dockutil --list | ${pkgs.coreutils}/bin/cut -f2)"
             if ! diff -wu <(echo -n "$haveURIs") <(echo -n '${wantURIs}') >&2 ; then
               echo >&2 "Resetting Dock."
-              ${dockutil}/bin/dockutil --no-restart --remove all
-              ${createEntries}
-              killall Dock
+              asUser ${dockutil}/bin/dockutil --no-restart --remove all
+              ${concatMapStrings
+                (entry: "asUser ${dockutil}/bin/dockutil --no-restart --add '${entry.path}' --section ${entry.section} ${entry.options}\n")
+                cfg.entries}
+              asUser /usr/bin/killall Dock
             else
               echo >&2 "Dock setup complete."
             fi

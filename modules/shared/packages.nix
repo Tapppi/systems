@@ -9,8 +9,8 @@ with pkgs; [
   bat
   btop
   coreutils
+  fastfetch # replaces neofetch, removed from nixpkgs as unmaintained upstream
   killall
-  neofetch
   openssh
   sqlite
   wget
@@ -33,12 +33,12 @@ with pkgs; [
   font-awesome
   hack-font
   noto-fonts
-  noto-fonts-emoji
+  noto-fonts-color-emoji
   meslo-lgs-nf
 
   # Node.js development tools
-  nodePackages.npm # globally install npm
-  nodePackages.prettier
+  # nodePackages was removed from nixpkgs; npm now ships with the nodejs package
+  prettier
   nodejs
 
   # Text and terminal utilities
