@@ -51,10 +51,6 @@
     let
       user = "tapani";
       linuxSystems = [ "x86_64-linux" "aarch64-linux" ];
-      # Apple Silicon only. nixpkgs 26.11 deprecates Intel macOS and refuses to
-      # evaluate x86_64-darwin without allowDeprecatedx86_64Darwin; the only
-      # Intel Mac here (tmopro18) is migrating to NixOS, so drop the platform
-      # rather than carry a deprecation flag for a host that is going away.
       darwinSystems = [ "aarch64-darwin" ];
       forAllSystems = f: nixpkgs.lib.genAttrs (linuxSystems ++ darwinSystems) f;
       devShell = system: let pkgs = nixpkgs.legacyPackages.${system}; in {
