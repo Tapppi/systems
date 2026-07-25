@@ -16,10 +16,11 @@ let user = "tapani"; in
 {
   # nvim from the flake's nvim input (nixCats-built package).
   environment.systemPackages = [
-    inputs.nvim.packages.${pkgs.system}.default
+    inputs.nvim.packages.${pkgs.stdenv.hostPlatform.system}.default
   ];
 
-  # --- Four Determinate-Nix accommodations (mirrored from ../darwin/default.nix) ---
+  # --- Four Determinate-Nix accommodations (mirrored from ../darwin/default.nix;
+  # keep the machines renderer in sync if nix-darwin's own format changes) ---
 
   # Determinate Nix owns the daemon and /etc/nix/nix.conf, so nix-darwin must
   # not manage Nix. Everything under `nix.*` becomes inert as a result.
@@ -73,8 +74,9 @@ let user = "tapani"; in
     max-free = ${toString (50 * 1024 * 1024 * 1024)}
   '';
 
-  # Replaces the old `nix.gc` block (inert under nix.enable = false). Only
-  # --delete-older-than prunes old generations. Sundays at 02:00.
+  # Scheduled GC via launchd, because `nix.gc` is inert under
+  # nix.enable = false. Only --delete-older-than prunes old generations.
+  # Sundays at 02:00.
   launchd.daemons.nix-gc = {
     script = ''
       exec /nix/var/nix/profiles/default/bin/nix-collect-garbage --delete-older-than 30d
@@ -90,7 +92,7 @@ let user = "tapani"; in
   system.checks.verifyNixPath = false;
   system.primaryUser = user;
 
-  # Tracks the initial version installed for backwards-compatibility; do not
-  # change. Matches ../darwin/default.nix so both configs share store paths.
+  # Tracks the nix-darwin option-default era for backwards compatibility; do
+  # not change.
   system.stateVersion = 6;
 }
