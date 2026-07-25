@@ -7,11 +7,13 @@
 # step so the installer USB is not pulled before the operator has confirmed
 # the install actually succeeded.
 #
-# Usage: install-dogmatix-emmc.sh [--target <disk>] [--flake <path>] [--yes] [--force-size]
-#   --target <disk>   block device to install to (default: /dev/mmcblk0)
-#   --flake <path>    path to the systems flake (default: /root/systems)
-#   --yes             skip the interactive confirmation prompt
-#   --force-size      skip the 50-70 GB target-size sanity check
+# Usage: install-dogmatix-emmc.sh [--target <disk>] [--flake <path>] [--yes] [--force-size] [--ignore-label-collision]
+#   --target <disk>           block device to install to (default: /dev/mmcblk0)
+#   --flake <path>             path to the systems flake (default: /root/systems)
+#   --yes                      skip the interactive confirmation prompt
+#   --force-size               skip the 50-70 GB target-size sanity check
+#   --ignore-label-collision   proceed even if NIXOS_ROOT/NIXOS_BOOT labels
+#                              are ambiguous across attached devices
 
 set -euo pipefail
 
@@ -19,15 +21,18 @@ TARGET=/dev/mmcblk0
 FLAKE=/root/systems
 ASSUME_YES=0
 FORCE_SIZE=0
+IGNORE_LABEL_COLLISION=0
 
 usage() {
   cat <<'EOF'
-Usage: install-dogmatix-emmc.sh [--target <disk>] [--flake <path>] [--yes] [--force-size]
+Usage: install-dogmatix-emmc.sh [--target <disk>] [--flake <path>] [--yes] [--force-size] [--ignore-label-collision]
 
-  --target <disk>   block device to install to (default: /dev/mmcblk0)
-  --flake <path>    path to the systems flake (default: /root/systems)
-  --yes             skip the interactive confirmation prompt
-  --force-size      skip the 50-70 GB target-size sanity check
+  --target <disk>           block device to install to (default: /dev/mmcblk0)
+  --flake <path>             path to the systems flake (default: /root/systems)
+  --yes                      skip the interactive confirmation prompt
+  --force-size               skip the 50-70 GB target-size sanity check
+  --ignore-label-collision   proceed even if NIXOS_ROOT/NIXOS_BOOT labels
+                             are ambiguous across attached devices
 EOF
 }
 
@@ -57,6 +62,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --force-size)
       FORCE_SIZE=1
+      shift
+      ;;
+    --ignore-label-collision)
+      IGNORE_LABEL_COLLISION=1
       shift
       ;;
     -h | --help)
@@ -137,6 +146,44 @@ resolve_disk_for_source() {
   fi
 }
 
+# NixOS mounts by label at boot, so any other attached device already
+# carrying a NIXOS_ROOT or NIXOS_BOOT label (e.g. a root-on-USB stick built
+# for the same host, per SYSMI-58/59) is a hazard: the initrd could mount
+# the wrong device. `blkid -o device -t LABEL=...` enumerates every device
+# with the label; `readlink -f /dev/disk/by-label/...` was tried first and
+# rejected — that symlink only ever names ONE device (whichever udev
+# resolved it to last), so it cannot detect a second device sharing the
+# label, only mask the collision.
+check_label_collisions() {
+  local label devices count collision=0
+  for label in NIXOS_BOOT NIXOS_ROOT; do
+    devices="$(blkid -o device -t "LABEL=$label" 2>/dev/null || true)"
+    count=0
+    [[ -n "$devices" ]] && count="$(wc -l <<<"$devices")"
+    if [[ "$count" -gt 1 ]]; then
+      echo "!! multiple devices carry LABEL=$label:" >&2
+      while IFS= read -r dev; do
+        echo "     $dev" >&2
+      done <<<"$devices"
+      collision=1
+    fi
+  done
+  [[ "$collision" -eq 0 ]]
+}
+
+enforce_label_collisions() {
+  if ! check_label_collisions; then
+    if [[ "$IGNORE_LABEL_COLLISION" -eq 1 ]]; then
+      echo "   --ignore-label-collision set — proceeding anyway" >&2
+    else
+      echo "   NixOS mounts by label at boot; an ambiguous label can boot the" >&2
+      echo "   wrong device. Detach or relabel the other device(s), or pass" >&2
+      echo "   --ignore-label-collision to proceed anyway." >&2
+      exit 1
+    fi
+  fi
+}
+
 # Refuse to touch whatever disk backs the running live system, whether that
 # is the installer ISO's own mount or the read-only nix store squashfs.
 for probe in /iso /nix/.ro-store; do
@@ -176,6 +223,12 @@ else
 fi
 PART1="${TARGET}${PART_SUFFIX}1"
 PART2="${TARGET}${PART_SUFFIX}2"
+
+# Cheap early check: catches a pre-existing collision (e.g. the USB-stick
+# root already attached) before any destructive step. Re-checked
+# mandatorily after mkfs below, since formatting $TARGET itself changes the
+# label census.
+enforce_label_collisions
 
 echo "==> plan"
 lsblk
@@ -218,29 +271,14 @@ udevadm settle
 mkfs.ext4 -F -L NIXOS_ROOT "$PART2"
 udevadm settle
 
+# Mandatory re-check: $TARGET's new partitions now carry the labels too, so
+# this is the real census nixos-install and the eventual boot will see.
+enforce_label_collisions
+
 echo "==> 3/5 mounting"
 mount "$PART2" /mnt
 mkdir -p /mnt/boot
 mount "$PART1" /mnt/boot
-
-# NixOS mounts by label at boot, so verify the labels are unambiguous on
-# this machine — another attached disk (e.g. a root-on-USB stick built for
-# the same host, per SYSMI-58/59) could carry the same NIXOS_ROOT/
-# NIXOS_BOOT labels. The partitions above were mounted by device path, not
-# by label, so this install is unaffected either way — but the ambiguity
-# must be surfaced, since it will confuse the installed system at boot.
-root_by_label="$(readlink -f /dev/disk/by-label/NIXOS_ROOT 2>/dev/null || true)"
-if [[ -n "$root_by_label" && "$root_by_label" != "$(readlink -f "$PART2")" ]]; then
-  echo "!! WARNING: /dev/disk/by-label/NIXOS_ROOT resolves to $root_by_label," >&2
-  echo "   not $PART2 — another attached disk has a conflicting NIXOS_ROOT" >&2
-  echo "   label. Remove or relabel $root_by_label before rebooting." >&2
-fi
-boot_by_label="$(readlink -f /dev/disk/by-label/NIXOS_BOOT 2>/dev/null || true)"
-if [[ -n "$boot_by_label" && "$boot_by_label" != "$(readlink -f "$PART1")" ]]; then
-  echo "!! WARNING: /dev/disk/by-label/NIXOS_BOOT resolves to $boot_by_label," >&2
-  echo "   not $PART1 — another attached disk has a conflicting NIXOS_BOOT" >&2
-  echo "   label. Remove or relabel $boot_by_label before rebooting." >&2
-fi
 
 echo "==> 4/5 nixos-install --flake ${FLAKE}#dogmatix"
 nixos-install --flake "${FLAKE}#dogmatix" --no-root-passwd
