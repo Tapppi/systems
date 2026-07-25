@@ -121,7 +121,21 @@
             ./hosts/darwin
           ];
         }
-      );
+      ) // {
+        # Minimal, self-contained config for this Mac (asterix): only nvim +
+        # nix-rosetta-builder + the Determinate accommodations. Deliberately
+        # does NOT reuse the genAttrs starter above (no home-manager, homebrew,
+        # or dock). Used to bring the rosetta Linux builder online. Keyed by
+        # hostname, mirroring nixosConfigurations.dogmatix below.
+        asterix = darwin.lib.darwinSystem {
+          system = "aarch64-darwin";
+          specialArgs = inputs // { inherit inputs; };
+          modules = [
+            inputs.nix-rosetta-builder.darwinModules.default
+            ./hosts/darwin-minimal
+          ];
+        };
+      };
 
       nixosConfigurations = nixpkgs.lib.genAttrs linuxSystems (system: nixpkgs.lib.nixosSystem {
         inherit system;
