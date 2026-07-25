@@ -32,4 +32,17 @@
   #
   # The resulting node key persists in /var/lib/tailscale across rebuilds.
   services.tailscale.enable = true;
+
+  # mDNS so a headless, DHCP-addressed box is reachable as `dogmatix.local`
+  # without hunting for its lease on the router. Resolves the "how do I find
+  # the IP to ssh in" gap on first boot.
+  services.avahi = {
+    enable = true;
+    nssmdns4 = true;
+    publish = {
+      enable = true;
+      addresses = true;
+      workstation = true;
+    };
+  };
 }

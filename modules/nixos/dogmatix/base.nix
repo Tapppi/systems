@@ -6,7 +6,10 @@
     loader = {
       systemd-boot = {
         enable = true;
-        configurationLimit = 20;
+        # systemd-boot copies each generation's kernel + initrd (~100 MB) onto
+        # the ESP. The install ESP is ~1 GiB, so keep the generation count low
+        # enough that it cannot fill and break boot.
+        configurationLimit = 8;
       };
       efi.canTouchEfiVariables = true;
     };

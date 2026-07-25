@@ -1,11 +1,10 @@
 # Hardware configuration for dogmatix.
 #
-# Filesystems and partitioning are declared in modules/nixos/dogmatix/disko.nix,
-# not here — disko generates the fileSystems entries.
-#
-# The kernel module lists below are hand-written for Alder Lake-N and have not
-# been checked against real detection output. Compare against
-# `nixos-generate-config --show-hardware-config` on the machine once it boots.
+# Hand-written, not generated. The kernel module lists are for Alder Lake-N and
+# the filesystem entries use partition labels rather than real UUIDs. Replace
+# with `nixos-generate-config --show-hardware-config` output taken on the
+# machine after the first install, keeping the label-based fileSystems only if
+# the install partitions are labelled NIXOS_ROOT / NIXOS_BOOT to match.
 { lib, modulesPath, ... }:
 
 {
@@ -20,7 +19,12 @@
     "usbhid"
     "usb_storage"
     "sd_mod"
-    "sdhci_pci" # integrated eMMC
+    # eMMC: sdhci_pci is the host controller, mmc_block the block driver.
+    # Both are required in initrd to mount root on /dev/mmcblk0p2, which is
+    # the primary install target — without mmc_block boot drops to an initrd
+    # emergency shell.
+    "sdhci_pci"
+    "mmc_block"
   ];
   boot.initrd.kernelModules = [ ];
   boot.kernelModules = [ "kvm-intel" ];
