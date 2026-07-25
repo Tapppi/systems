@@ -150,10 +150,10 @@ resolve_disk_for_source() {
 # carrying a NIXOS_ROOT or NIXOS_BOOT label (e.g. a root-on-USB stick built
 # for the same host, per SYSMI-58/59) is a hazard: the initrd could mount
 # the wrong device. `blkid -o device -t LABEL=...` enumerates every device
-# with the label; `readlink -f /dev/disk/by-label/...` was tried first and
-# rejected — that symlink only ever names ONE device (whichever udev
-# resolved it to last), so it cannot detect a second device sharing the
-# label, only mask the collision.
+# with the label. Checking `readlink -f /dev/disk/by-label/...` instead would
+# not work: that symlink only ever names ONE device (whichever udev resolved
+# it to last), so it cannot detect a second device sharing the label, only
+# mask the collision.
 check_label_collisions() {
   local label devices count collision=0
   for label in NIXOS_BOOT NIXOS_ROOT; do
