@@ -7,9 +7,13 @@
 # step so the installer USB is not pulled before the operator has confirmed
 # the install actually succeeded.
 #
-# Usage: install-dogmatix-emmc.sh [--target <disk>] [--flake <path>] [--yes] [--force-size] [--ignore-label-collision]
+# Usage: install-dogmatix-emmc.sh [--target <disk>] [--flake <path> | --from-running] [--yes] [--force-size] [--ignore-label-collision]
 #   --target <disk>           block device to install to (default: /dev/mmcblk0)
 #   --flake <path>             path to the systems flake (default: /root/systems)
+#   --from-running             install the currently running system closure
+#                              (/run/current-system) instead of evaluating a
+#                              flake — no repo or network needed; for use when
+#                              booted from the dogmatix root-on-USB stick
 #   --yes                      skip the interactive confirmation prompt
 #   --force-size               skip the 50-70 GB target-size sanity check
 #   --ignore-label-collision   proceed even if NIXOS_ROOT/NIXOS_BOOT labels
@@ -19,16 +23,21 @@ set -euo pipefail
 
 TARGET=/dev/mmcblk0
 FLAKE=/root/systems
+FROM_RUNNING=0
 ASSUME_YES=0
 FORCE_SIZE=0
 IGNORE_LABEL_COLLISION=0
 
 usage() {
   cat <<'EOF'
-Usage: install-dogmatix-emmc.sh [--target <disk>] [--flake <path>] [--yes] [--force-size] [--ignore-label-collision]
+Usage: install-dogmatix-emmc.sh [--target <disk>] [--flake <path> | --from-running] [--yes] [--force-size] [--ignore-label-collision]
 
   --target <disk>           block device to install to (default: /dev/mmcblk0)
   --flake <path>             path to the systems flake (default: /root/systems)
+  --from-running             install the currently running system closure
+                             (/run/current-system) instead of evaluating a
+                             flake — no repo or network needed; for use when
+                             booted from the dogmatix root-on-USB stick
   --yes                      skip the interactive confirmation prompt
   --force-size               skip the 50-70 GB target-size sanity check
   --ignore-label-collision   proceed even if NIXOS_ROOT/NIXOS_BOOT labels
@@ -55,6 +64,10 @@ while [[ $# -gt 0 ]]; do
       fi
       FLAKE="$2"
       shift 2
+      ;;
+    --from-running)
+      FROM_RUNNING=1
+      shift
       ;;
     --yes)
       ASSUME_YES=1
@@ -207,10 +220,23 @@ if [[ "$FORCE_SIZE" -ne 1 ]]; then
   fi
 fi
 
-if [[ ! -d "$FLAKE" ]]; then
+if [[ "$FROM_RUNNING" -eq 1 ]]; then
+  if [[ ! -e /run/current-system/bin/switch-to-configuration ]]; then
+    echo "!! /run/current-system does not look like a NixOS system closure" >&2
+    echo "   --from-running only works on a booted NixOS system (e.g. the" >&2
+    echo "   dogmatix root-on-USB stick), not in an installer live env" >&2
+    exit 1
+  fi
+  if ! command -v nixos-install >/dev/null 2>&1; then
+    echo "!! nixos-install not on PATH — this system config predates the" >&2
+    echo "   self-install tooling; run: nix shell nixpkgs#nixos-install-tools" >&2
+    exit 1
+  fi
+elif [[ ! -d "$FLAKE" ]]; then
   echo "!! flake path does not exist: $FLAKE" >&2
   echo "   rsync or clone the systems repo there first, e.g.:" >&2
   echo "     mkdir -p '$FLAKE' && rsync -a asterix:project/github/tapppi/systems/ '$FLAKE/'" >&2
+  echo "   or pass --from-running to install the running system closure" >&2
   exit 1
 fi
 
@@ -235,7 +261,11 @@ lsblk
 echo
 echo "    target:     $TARGET"
 echo "    partitions: $PART1 (ESP), $PART2 (root)"
-echo "    flake:      ${FLAKE}#dogmatix"
+if [[ "$FROM_RUNNING" -eq 1 ]]; then
+  echo "    system:     $(readlink -f /run/current-system) (running closure)"
+else
+  echo "    flake:      ${FLAKE}#dogmatix"
+fi
 
 if [[ "$ASSUME_YES" -ne 1 ]]; then
   echo
@@ -280,8 +310,13 @@ mount "$PART2" /mnt
 mkdir -p /mnt/boot
 mount "$PART1" /mnt/boot
 
-echo "==> 4/5 nixos-install --flake ${FLAKE}#dogmatix"
-nixos-install --flake "${FLAKE}#dogmatix" --no-root-passwd
+if [[ "$FROM_RUNNING" -eq 1 ]]; then
+  echo "==> 4/5 nixos-install --system /run/current-system"
+  nixos-install --system /run/current-system --no-root-passwd
+else
+  echo "==> 4/5 nixos-install --flake ${FLAKE}#dogmatix"
+  nixos-install --flake "${FLAKE}#dogmatix" --no-root-passwd
+fi
 
 echo "==> 5/5 done"
 echo "DONE — do not forget the installer USB; system is ready to boot from eMMC"

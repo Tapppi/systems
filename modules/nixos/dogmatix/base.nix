@@ -60,7 +60,20 @@
 
   programs.zsh.enable = true;
 
-  environment.systemPackages = pkgs.callPackage ./packages.nix { };
+  environment.systemPackages = pkgs.callPackage ./packages.nix { } ++ [
+    # Self-install/recovery tooling: a dogmatix system booted from the
+    # root-on-USB stick can partition and install the internal eMMC itself
+    # (`install-dogmatix-emmc`), making the stick a standalone recovery +
+    # reinstall medium with no installer ISO or control machine needed.
+    pkgs.nixos-install-tools
+    pkgs.parted
+    pkgs.dosfstools
+    (pkgs.runCommandLocal "konehuone-install-scripts" { } ''
+      mkdir -p $out/bin
+      cp ${../../../scripts/install-dogmatix-emmc.sh} $out/bin/install-dogmatix-emmc
+      chmod +x $out/bin/install-dogmatix-emmc
+    '')
+  ];
 
   # Tracks the initial version installed. Must not exceed the nixpkgs this
   # flake builds against — verify with:
