@@ -2,7 +2,7 @@
 # Install NixOS to dogmatix's internal eMMC from the minimal installer live
 # environment. Run as root (sudo -i) on the n150 mini-PC itself.
 #
-# Encodes the eMMC install runbook from SYSMI-58: partition, format, mount,
+# Encodes the eMMC install runbook from HLB-5: partition, format, mount,
 # nixos-install. Does NOT reboot at the end — that is a deliberate manual
 # step so the installer USB is not pulled before the operator has confirmed
 # the install actually succeeded.
@@ -148,7 +148,7 @@ resolve_disk_for_source() {
 
 # NixOS mounts by label at boot, so any other attached device already
 # carrying a NIXOS_ROOT or NIXOS_BOOT label (e.g. a root-on-USB stick built
-# for the same host, per SYSMI-58/59) is a hazard: the initrd could mount
+# for the same host, per HLB-5/SYSMI-59) is a hazard: the initrd could mount
 # the wrong device. `blkid -o device -t LABEL=...` enumerates every device
 # with the label. Checking `readlink -f /dev/disk/by-label/...` instead would
 # not work: that symlink only ever names ONE device (whichever udev resolved
