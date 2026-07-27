@@ -306,6 +306,8 @@ udevadm settle
 enforce_label_collisions
 
 echo "==> 3/5 mounting"
+# Installed systems have no /mnt (only installer ISOs ship one).
+mkdir -p /mnt
 mount "$PART2" /mnt
 mkdir -p /mnt/boot
 mount "$PART1" /mnt/boot
