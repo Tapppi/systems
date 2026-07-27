@@ -160,6 +160,21 @@
           specialArgs = inputs // { inherit inputs; };
           modules = [ ./hosts/nixos/dogmatix ];
         };
+
+        # SSH-enabled installer image for headless host onboarding: boots with
+        # the Asterix Identity key authorized and sshd up, reachable at
+        # konehuone-installer.local. Build the ISO via
+        # packages.x86_64-linux.konehuone-installer-iso below.
+        konehuone-installer = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = inputs // { inherit inputs; };
+          modules = [ ./modules/nixos/installer ];
+        };
       };
+
+      # Buildable artifacts. The installer ISO needs an x86_64-linux + kvm
+      # builder (the Mac's rosetta builder, or dogmatix once up).
+      packages.x86_64-linux.konehuone-installer-iso =
+        self.nixosConfigurations.konehuone-installer.config.system.build.isoImage;
   };
 }
