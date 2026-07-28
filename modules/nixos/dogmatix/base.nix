@@ -13,7 +13,11 @@
       };
       efi.canTouchEfiVariables = true;
     };
-    kernelPackages = pkgs.linuxPackages_latest;
+    # Default (LTS-tracking) kernel rather than linuxPackages_latest: the ZFS
+    # module (storage.nix) must build against the kernel, and upstream ZFS
+    # regularly lags the newest mainline. Alder Lake-N is fully supported by
+    # the default kernel.
+    kernelPackages = pkgs.linuxPackages;
   };
 
   time.timeZone = "Europe/Helsinki";

@@ -9,6 +9,7 @@
   imports = [
     ../../shared
     ./base.nix
+    ./storage.nix
     ./networking.nix
     ./ssh.nix
     ./users.nix
