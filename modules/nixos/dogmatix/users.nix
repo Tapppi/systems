@@ -16,14 +16,13 @@ let
   #     asterix (tmopro18's), not asterix's own identity
   #   - the key in hosts/nixos/default.nix — the dustinlyons starter
   #     template's, and a third party's
-  # Two entry points on purpose: this is a headless box with SSH password
-  # auth disabled, so a single key is a single point of lockout.
+  # Single fleet key: it lives in the 1Password vault, which every control
+  # machine (asterix, tmopro18) accesses via the 1Password SSH agent — so one
+  # key serves all control machines and lockout is governed by 1Password
+  # availability, not per-machine key files.
   keys = [
-    # "Asterix Identity" — the M5 Pro Mac workstation.
+    # "Asterix Identity" — held in 1Password.
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPmxkJJ/WnwVmYdvylfvp4D+qOAcNMQ/gzFLGkPXVVJ5"
-    # tmopro18 — the 2018 MBP. Second way in if asterix or 1Password is
-    # unavailable. Taken from asterix's ~/.ssh/authorized_keys.
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII80FjrMxHj4v1vIH5i8HGplMAVeNvMyMWocjrBIWRhH"
   ];
 in
 {
