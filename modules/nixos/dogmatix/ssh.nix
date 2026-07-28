@@ -7,7 +7,11 @@
     settings = {
       PasswordAuthentication = false;
       KbdInteractiveAuthentication = false;
-      PermitRootLogin = "no";
+      # Key-only root login: the remote-deploy path (nixos-rebuild
+      # --target-host / deploy-rs) and unattended sysadmin from the control
+      # machine authenticate as root with the fleet key; password/interactive
+      # root auth stays impossible.
+      PermitRootLogin = "prohibit-password";
     };
   };
 }
