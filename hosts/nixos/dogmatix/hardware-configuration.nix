@@ -10,8 +10,11 @@
 {
   imports = [ (modulesPath + "/installer/scan/not-detected.nix") ];
 
-  # Alder Lake-N (N150) mini-PC: NVMe/M.2 boot, USB storage attached.
-  # Verify against real detection output before trusting this list.
+  # Alder Lake-N (N150) mini-PC: boots from the internal eMMC (/dev/mmcblk0);
+  # a 512 GB Intel 660p NVMe (Windows 11) and USB storage are also attached.
+  # This list is a verified safe superset of real detection output: detection
+  # reports xhci_pci nvme usbhid usb_storage sd_mod sdhci_pci; ahci and
+  # mmc_block are added on top (see the mmc_block note below).
   boot.initrd.availableKernelModules = [
     "xhci_pci"
     "ahci"

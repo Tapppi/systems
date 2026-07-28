@@ -115,7 +115,8 @@ esac
 echo "==> safety checks"
 
 # Refuse the M.2 outright, regardless of what --target says. This is the
-# 128 GB Intel M.2 in dogmatix, never the intended install target.
+# 512 GB Intel 660p in dogmatix, which holds a Windows 11 install with real
+# user data — never the intended install target.
 if [[ "$TARGET" == "/dev/nvme0n1" ]]; then
   echo "!! refusing to touch /dev/nvme0n1 — that is the M.2, not the eMMC" >&2
   exit 1
