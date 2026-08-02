@@ -5,7 +5,8 @@
 # imperative Incus until HLB-9/kone land:
 #   incus launch images:nixos/unstable <name> -p default -p bench-guest
 # The bench-guest Incus profile carries the /dev/net/tun device Tailscale
-# needs. Deploy/update by pushing this repo into the guest and running
+# needs and security.nesting=true — without nesting, nix builds inside the
+# unprivileged guest fail on sandbox namespace setup. Deploy/update by pushing this repo into the guest and running
 #   nixos-rebuild switch --flake /root/systems#<name>
 # (or nixos-rebuild --target-host over the tailnet once the guest is joined).
 # Keep these modules plain — no option abstractions.
@@ -25,6 +26,18 @@ in
   # NixOS-in-LXC: systemd container mode, no kernel or bootloader managed
   # inside the guest.
   boot.isContainer = true;
+
+  # The images:nixos LXC image ships /sbin/init as a static symlink into the
+  # image's original store path, so a plain nixos-rebuild switch would boot
+  # back into the image generation on restart. Keep init pointed at the
+  # system profile instead (idempotent; runs on every activation).
+  system.activationScripts.benchGuestInit = ''
+    ln -sfn /nix/var/nix/profiles/system/init /sbin/init
+  '';
+
+  # No console TTY is attached under Incus; the unit just flaps and turns
+  # every switch-to-configuration into exit 4. Access is incus exec + SSH.
+  systemd.services.console-getty.enable = false;
 
   networking = {
     useDHCP = true; # eth0 from incusbr0 (NAT)
