@@ -171,6 +171,16 @@
           specialArgs = inputs // { inherit inputs; };
           modules = [ ./hosts/nixos/bench-absurd ];
         };
+        bench-obs = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = inputs // { inherit inputs; };
+          modules = [ ./hosts/nixos/bench-obs ];
+        };
+        bench-temporal = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = inputs // { inherit inputs; };
+          modules = [ ./hosts/nixos/bench-temporal ];
+        };
 
         # SSH-enabled installer image for headless host onboarding: boots with
         # the Asterix Identity key authorized and sshd up, reachable at
