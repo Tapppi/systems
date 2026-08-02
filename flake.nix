@@ -161,6 +161,17 @@
           modules = [ ./hosts/nixos/dogmatix ];
         };
 
+        # Workflow-engine bench guests: NixOS LXC system containers under
+        # Incus on dogmatix (tieto goldmill/wiki/reviews/bench/). Lifecycle
+        # is imperative (`incus launch images:nixos/unstable <name> -p
+        # default -p bench-guest`); contents deploy via nixos-rebuild — see
+        # modules/nixos/bench/guest-base.nix.
+        bench-absurd = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = inputs // { inherit inputs; };
+          modules = [ ./hosts/nixos/bench-absurd ];
+        };
+
         # SSH-enabled installer image for headless host onboarding: boots with
         # the Asterix Identity key authorized and sshd up, reachable at
         # konehuone-installer.local. Build the ISO via
