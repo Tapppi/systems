@@ -39,6 +39,22 @@ in
   # every switch-to-configuration into exit 4. Access is incus exec + SSH.
   systemd.services.console-getty.enable = false;
 
+  # MagicDNS (bare bench-* names) needs a resolv manager for tailscaled to
+  # program. isContainer defaults to the host's resolv.conf, which resolved
+  # rejects — the guest manages its own.
+  services.resolved.enable = true;
+  networking.useHostResolvConf = false;
+
+  # Every guest exports node metrics; bench-obs scrapes them over the
+  # tailnet. The textfile collector lets guests publish custom gauges (e.g.
+  # absurd queue depth) from timers.
+  services.prometheus.exporters.node = {
+    enable = true;
+    enabledCollectors = [ "systemd" "textfile" ];
+    extraFlags = [ "--collector.textfile.directory=/var/lib/node-exporter-textfile" ];
+  };
+  systemd.tmpfiles.rules = [ "d /var/lib/node-exporter-textfile 0755 root root -" ];
+
   networking = {
     useDHCP = true; # eth0 from incusbr0 (NAT)
     nftables.enable = true;
