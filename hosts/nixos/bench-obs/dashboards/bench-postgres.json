@@ -1912,7 +1912,7 @@
       "id": 45,
       "type": "timeseries",
       "title": "Dead tuples by table",
-      "description": "AWAITS FUTURE METRIC: pg_stat_user_tables_n_dead_tup no longer receives samples. The exporter authenticates as the bench_exporter role, whose DSN names the postgres database, and pg_stat_user_tables is per-connection \u2014 it now reports on a database with no user tables. Dead-tuple and vacuum counters per engine need the same per-database access the table poller has, either via --auto-discover-databases on the exporter or a dead-tuple query added to the textfile poller alongside the size queries.",
+      "description": "Dead tuples per table, from the pg-table-metrics poller rather than from postgres_exporter: its stat_user_tables collector is per-connection and the exporter DSN names the postgres database, which holds no user tables. The poller already connects to each engine database for the size queries, so the vacuum counters ride along. A line climbing with no autovacuum behind it is bloat forming; pair it with pg_table_last_autovacuum_timestamp_seconds.",
       "datasource": {
         "type": "prometheus",
         "uid": "${ds}"
@@ -1930,9 +1930,9 @@
             "uid": "${ds}"
           },
           "refId": "A",
-          "expr": "pg_stat_user_tables_n_dead_tup > 0",
+          "expr": "pg_table_dead_tuples > 0",
           "editorMode": "code",
-          "legendFormat": "{{datname}} \u00b7 {{relname}}",
+          "legendFormat": "{{datname}} \u00b7 {{schema}}.{{table}}",
           "instant": false,
           "range": true
         }
@@ -2868,7 +2868,7 @@
       "id": 68,
       "type": "timeseries",
       "title": "WAL generation rate",
-      "description": "AWAITS FUTURE METRIC: no cumulative WAL volume counter is exported. The wal collector reads pg_ls_waldir, which describes the directory as it stands and cannot distinguish generation from recycling, so no rate over it means bytes written. WAL bytes per second is the cleanest cross-engine measure of write amplification and needs pg_stat_wal.wal_bytes, added either through a runConfigFile query on the exporter or as another textfile poller query.",
+      "description": "Cluster-wide WAL actually written, from pg_stat_wal via the pg-table-metrics poller. postgres_exporter's wal collector reads pg_ls_waldir instead, which describes the directory as it stands and sawtooths as segments recycle, so a rate over it is not a write rate. This is the bench's cross-engine write-amplification measure. It is cluster-wide, not per database \u2014 attribute it by running one engine at a time.",
       "datasource": {
         "type": "prometheus",
         "uid": "${ds}"
@@ -2886,7 +2886,7 @@
             "uid": "${ds}"
           },
           "refId": "A",
-          "expr": "rate(pg_stat_wal_wal_bytes_total[5m])",
+          "expr": "rate(pg_stat_wal_bytes_total[5m])",
           "editorMode": "code",
           "legendFormat": "WAL bytes/s",
           "instant": false,

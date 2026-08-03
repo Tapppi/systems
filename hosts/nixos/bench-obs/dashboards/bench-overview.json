@@ -48,6 +48,330 @@
   },
   "panels": [
     {
+      "id": 5,
+      "type": "row",
+      "title": "Health",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 90,
+      "type": "stat",
+      "title": "Firing alerts",
+      "description": "Prometheus alert rules evaluated on bench-obs (alert-rules.nix). There is no Alertmanager: the rule manager's own ALERTS series is the delivery mechanism, and this row is where it is delivered. `or vector(0)` keeps an empty result rendering as a green 0 rather than as No data.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 3,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 91,
+      "type": "table",
+      "title": "What is firing",
+      "description": "One row per firing alert. severity=critical means the bench is not measuring what it claims to; warning means a signal is degraded; info is a fact worth knowing (a restart, a reboot).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 3,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "severity",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "__name__": true,
+              "alertstate": true,
+              "job": true
+            },
+            "indexByName": {
+              "severity": 0,
+              "alertname": 1,
+              "instance": 2
+            }
+          }
+        }
+      ],
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "expr": "ALERTS{alertstate=\"firing\"}",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 92,
+      "type": "stat",
+      "title": "Targets down or missing",
+      "description": "up == 0 counts a target that answered and failed. The second term counts jobs whose series are absent entirely — a scrape pool that fails to construct emits no up series to be zero, which is how the Incus scrape died unnoticed once.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 3,
+        "x": 15,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "expr": "count(up == 0) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 93,
+      "type": "stat",
+      "title": "Failed units, all guests",
+      "description": "node_systemd_unit_state{state=\"failed\"} across dogmatix and every guest. A unit that crashes and restarts inside the 15 s scrape never reads failed — the BenchUnitRestartLoop rule covers that case from the restart counter instead.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 3,
+        "x": 18,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "expr": "sum(node_systemd_unit_state{state=\"failed\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 94,
+      "type": "stat",
+      "title": "Textfile parse errors",
+      "description": "node_exporter drops an unparseable textfile's metrics entirely, so the panel it feeds reads No data while the poller's own up gauge, written by the last good file, still reads 1. This is the only signal that separates the two.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 3,
+        "x": 21,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
+          "editorMode": "code",
+          "expr": "sum(node_textfile_scrape_error) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
       "id": 1,
       "type": "row",
       "title": "Temporal",
@@ -56,7 +380,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 8
       },
       "panels": []
     },
@@ -73,7 +397,7 @@
         "h": 6,
         "w": 7,
         "x": 0,
-        "y": 1
+        "y": 9
       },
       "fieldConfig": {
         "defaults": {
@@ -153,7 +477,7 @@
         "h": 6,
         "w": 8,
         "x": 7,
-        "y": 1
+        "y": 9
       },
       "fieldConfig": {
         "defaults": {
@@ -230,7 +554,7 @@
         "h": 6,
         "w": 3,
         "x": 15,
-        "y": 1
+        "y": 9
       },
       "fieldConfig": {
         "defaults": {
@@ -296,7 +620,7 @@
         "h": 6,
         "w": 3,
         "x": 18,
-        "y": 1
+        "y": 9
       },
       "fieldConfig": {
         "defaults": {
@@ -354,7 +678,7 @@
         "h": 6,
         "w": 3,
         "x": 21,
-        "y": 1
+        "y": 9
       },
       "fieldConfig": {
         "defaults": {
@@ -439,7 +763,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 7
+        "y": 15
       },
       "panels": []
     },
@@ -456,7 +780,7 @@
         "h": 6,
         "w": 7,
         "x": 0,
-        "y": 8
+        "y": 16
       },
       "fieldConfig": {
         "defaults": {
@@ -536,7 +860,7 @@
         "h": 6,
         "w": 8,
         "x": 7,
-        "y": 8
+        "y": 16
       },
       "fieldConfig": {
         "defaults": {
@@ -624,7 +948,7 @@
         "h": 6,
         "w": 3,
         "x": 15,
-        "y": 8
+        "y": 16
       },
       "fieldConfig": {
         "defaults": {
@@ -690,7 +1014,7 @@
         "h": 6,
         "w": 3,
         "x": 18,
-        "y": 8
+        "y": 16
       },
       "fieldConfig": {
         "defaults": {
@@ -748,7 +1072,7 @@
         "h": 6,
         "w": 3,
         "x": 21,
-        "y": 8
+        "y": 16
       },
       "fieldConfig": {
         "defaults": {
@@ -833,7 +1157,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 14
+        "y": 22
       },
       "panels": []
     },
@@ -850,7 +1174,7 @@
         "h": 6,
         "w": 7,
         "x": 0,
-        "y": 15
+        "y": 23
       },
       "fieldConfig": {
         "defaults": {
@@ -930,7 +1254,7 @@
         "h": 6,
         "w": 8,
         "x": 7,
-        "y": 15
+        "y": 23
       },
       "fieldConfig": {
         "defaults": {
@@ -1007,7 +1331,7 @@
         "h": 6,
         "w": 3,
         "x": 15,
-        "y": 15
+        "y": 23
       },
       "fieldConfig": {
         "defaults": {
@@ -1073,7 +1397,7 @@
         "h": 6,
         "w": 3,
         "x": 18,
-        "y": 15
+        "y": 23
       },
       "fieldConfig": {
         "defaults": {
@@ -1131,7 +1455,7 @@
         "h": 6,
         "w": 3,
         "x": 21,
-        "y": 15
+        "y": 23
       },
       "fieldConfig": {
         "defaults": {
@@ -1216,7 +1540,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 21
+        "y": 29
       },
       "panels": []
     },
@@ -1233,7 +1557,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 22
+        "y": 30
       },
       "fieldConfig": {
         "defaults": {
@@ -1299,7 +1623,7 @@
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 22
+        "y": 30
       },
       "fieldConfig": {
         "defaults": {
@@ -1365,7 +1689,7 @@
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 22
+        "y": 30
       },
       "fieldConfig": {
         "defaults": {
@@ -1431,7 +1755,7 @@
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 22
+        "y": 30
       },
       "fieldConfig": {
         "defaults": {
@@ -1497,7 +1821,7 @@
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 22
+        "y": 30
       },
       "fieldConfig": {
         "defaults": {
@@ -1554,7 +1878,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 22
+        "y": 30
       },
       "fieldConfig": {
         "defaults": {
@@ -1620,7 +1944,7 @@
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 26
+        "y": 34
       },
       "fieldConfig": {
         "defaults": {
@@ -1708,7 +2032,7 @@
         "h": 6,
         "w": 8,
         "x": 8,
-        "y": 26
+        "y": 34
       },
       "fieldConfig": {
         "defaults": {
@@ -1785,7 +2109,7 @@
         "h": 6,
         "w": 8,
         "x": 16,
-        "y": 26
+        "y": 34
       },
       "fieldConfig": {
         "defaults": {

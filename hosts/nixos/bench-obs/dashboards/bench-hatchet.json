@@ -783,7 +783,7 @@
       "id": 45,
       "type": "timeseries",
       "title": "Tenant worker slots",
-      "description": "AWAITS FUTURE METRIC: hatchet_tenant_worker_slots, _used_worker_slots and _available_worker_slots are declared by hatchet-lite but export no samples on this deployment, so this panel is empty. The whole worker-slot family (including the _worker_label_slots variants) is silent, which means worker capacity and the label-matching that drives bench worker classes are not observable from Prometheus; worker presence has to be read over REST. The other hatchet_tenant_* families do carry a tenant_id label and do report.",
+      "description": "Slot capacity per connected worker; the underlying series carry worker_id and worker_name. The family is emitted only while a worker holds its gRPC connection and vanishes the moment it disconnects, so its absence — not a zero — is how Hatchet says no worker is attached. Every expression ends in `or vector(0)` to render that absence as a hard zero line, because a No-data panel is indistinguishable from a metric that was never implemented. The bench workers are deliberately parked, so zero is the expected reading here.",
       "datasource": { "type": "prometheus", "uid": "${ds}" },
       "gridPos": { "h": 7, "w": 24, "x": 0, "y": 70 },
       "fieldConfig": {
@@ -799,7 +799,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${ds}" },
-          "expr": "sum(hatchet_tenant_worker_slots)",
+          "expr": "sum(hatchet_tenant_worker_slots) or vector(0)",
           "legendFormat": "total slots",
           "editorMode": "code",
           "range": true
@@ -807,7 +807,7 @@
         {
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "${ds}" },
-          "expr": "sum(hatchet_tenant_used_worker_slots)",
+          "expr": "sum(hatchet_tenant_used_worker_slots) or vector(0)",
           "legendFormat": "used slots",
           "editorMode": "code",
           "range": true
@@ -815,8 +815,16 @@
         {
           "refId": "C",
           "datasource": { "type": "prometheus", "uid": "${ds}" },
-          "expr": "sum(hatchet_tenant_available_worker_slots)",
+          "expr": "sum(hatchet_tenant_available_worker_slots) or vector(0)",
           "legendFormat": "available slots",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "D",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "count(hatchet_tenant_worker_slots) or vector(0)",
+          "legendFormat": "workers connected",
           "editorMode": "code",
           "range": true
         }
