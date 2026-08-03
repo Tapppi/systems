@@ -1,0 +1,826 @@
+{
+  "uid": "bench-hatchet",
+  "title": "Bench — Hatchet",
+  "description": "Per-engine view of the Hatchet bench container: queue depth, throughput, latency, footprint against its 1 GiB Incus cap, and whether the engine and its REST poller are reporting.",
+  "tags": ["bench", "engine", "hatchet"],
+  "timezone": "browser",
+  "editable": false,
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "bench-prometheus", "value": "bench-prometheus" },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Queue depth",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Queue depth by queue",
+      "description": "hatchet_queue_depth from the bench-obs REST poller (job=node, instance=bench-obs:9100, node-exporter textfile collector). No Hatchet Prometheus metric carries a queue or worker-class label, so depth is polled from /api/v1/tenants/{tenant}/step-run-queue-metrics and zero-filled for the known bench queues — a queue with no pending work is absent from the API response. max by (queue) tolerates a transient duplicate series while a label set changes. This is the wake-on-LAN signal: work waiting for a worker class that is switched off.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "max by (queue) (hatchet_queue_depth)",
+          "legendFormat": "{{queue}}",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "bargauge",
+      "title": "Current depth per queue",
+      "description": "Latest hatchet_queue_depth per bench queue from the REST poller. All five bench queues are always present because the poller zero-fills them; an empty panel means the poller is down, not that the queues are empty — check the Health row.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 25 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "displayMode": "gradient", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "max by (queue) (hatchet_queue_depth)",
+          "legendFormat": "{{queue}}",
+          "editorMode": "code",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Total work waiting",
+      "description": "Sum of hatchet_queue_depth across all bench queues, from the REST poller. Zero here is only meaningful when hatchet_poller_up is 1.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "graphMode": "area", "textMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum(max by (queue) (hatchet_queue_depth))",
+          "legendFormat": "waiting",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Live task states (QUEUED / RUNNING)",
+      "description": "hatchet_tasks_by_status from the REST poller (/api/v1/stable/tenants/{tenant}/task-metrics). The API requires a `since` window, so every status here is a count over a trailing 24 h window rather than an all-time total. QUEUED and RUNNING are the two that behave like live gauges over that window; the terminal statuses are on the Throughput row instead so a window count is never read as an instantaneous value.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "max by (status) (hatchet_tasks_by_status{status=~\"QUEUED|RUNNING\"})",
+          "legendFormat": "{{status}}",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Running task detail",
+      "description": "hatchet_tasks_running_detail from the REST poller: `onWorker` are tasks a worker has picked up, `evicted` are tasks Hatchet counts as running but whose worker connection is gone. A non-zero `evicted` with `onWorker` at zero is the shape of a task stranded by a disappeared worker.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "max by (detail) (hatchet_tasks_running_detail)",
+          "legendFormat": "{{detail}}",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Throughput",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
+      "panels": []
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Task rate",
+      "description": "Per-second rate of the tenant-global counters hatchet_created_tasks_total, hatchet_succeeded_tasks_total and hatchet_failed_tasks_total from the hatchet-lite server (job=hatchet, dogmatix:9090). These counters carry no labels at all, so this is engine-wide and cannot be split per queue or workflow.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "failed" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum(rate(hatchet_created_tasks_total[5m]))",
+          "legendFormat": "created",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum(rate(hatchet_succeeded_tasks_total[5m]))",
+          "legendFormat": "succeeded",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum(rate(hatchet_failed_tasks_total[5m]))",
+          "legendFormat": "failed",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "bargauge",
+      "title": "Task outcomes, trailing 24 h",
+      "description": "hatchet_tasks_by_status from the REST poller, terminal statuses only. These are counts over the poller's trailing 24 h `since` window, not cumulative totals and not live gauges — they fall as old tasks age out of the window.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "min": 0 },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "FAILED" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] },
+          { "matcher": { "id": "byName", "options": "COMPLETED" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] }
+        ]
+      },
+      "options": { "displayMode": "gradient", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "max by (status) (hatchet_tasks_by_status{status=~\"COMPLETED|FAILED|CANCELLED\"})",
+          "legendFormat": "{{status}}",
+          "editorMode": "code",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Scheduling timeouts, 24 h",
+      "description": "increase(hatchet_scheduling_timed_out[24h]) from the hatchet-lite server. This counter fires when Hatchet's 300 s DefaultScheduleTimeout kills a task that is still waiting for a worker that does not exist — the sharpest Hatchet trap in this bench, because a task parked for an offline worker class is silently destroyed unless schedule_timeout is explicitly overridden. Any non-zero value here means work was discarded, not delayed.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 25 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "area", "textMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "increase(hatchet_scheduling_timed_out[24h])",
+          "legendFormat": "timed out",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Scheduler friction",
+      "description": "Per-second rates of the tenant-global scheduler counters on job=hatchet: retried, reassigned, rate-limited, skipped and cancelled tasks. These distinguish an engine that is busy from one that is churning — reassignment and rate limiting climb before throughput drops.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 7, "w": 16, "x": 8, "y": 25 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 5, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "rate(hatchet_retried_tasks_total[5m])",
+          "legendFormat": "retried",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "rate(hatchet_reassigned_tasks[5m])",
+          "legendFormat": "reassigned",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "rate(hatchet_rate_limited[5m])",
+          "legendFormat": "rate limited",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "D",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "rate(hatchet_skipped_tasks_total[5m])",
+          "legendFormat": "skipped",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "E",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "rate(hatchet_cancelled_tasks_total[5m])",
+          "legendFormat": "cancelled",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "F",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "rate(hatchet_queue_invocations_total[5m])",
+          "legendFormat": "queue invocations",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "row",
+      "title": "Latency",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+      "panels": []
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Queue-to-start latency",
+      "description": "Quantiles and mean of hatchet_queued_to_assigned_time_seconds, the histogram of time from a task being queued to being assigned to a worker (job=hatchet). Buckets top out at 15 s, so anything slower saturates the +Inf bucket and the p95 pins at 15 — a task parked for an absent worker will always read as the top bucket, not as its true wait.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 0, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "histogram_quantile(0.50, sum by (le) (increase(hatchet_queued_to_assigned_time_seconds_bucket[1h])))",
+          "legendFormat": "p50",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "histogram_quantile(0.95, sum by (le) (increase(hatchet_queued_to_assigned_time_seconds_bucket[1h])))",
+          "legendFormat": "p95",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "increase(hatchet_queued_to_assigned_time_seconds_sum[1h]) / increase(hatchet_queued_to_assigned_time_seconds_count[1h])",
+          "legendFormat": "mean",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Workflow duration p95 by workflow",
+      "description": "p95 of hatchet_tenant_workflow_duration_milliseconds, converted to seconds. This is the one Hatchet histogram that carries a workflow_name label, so it is the only per-bench-workload latency the engine exports natively; it also carries a status label and only COMPLETED and FAILED runs are recorded. A workflow with no completions in the window reads NaN and draws no line.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 0, "showPoints": "auto" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "histogram_quantile(0.95, sum by (le, workflow_name) (increase(hatchet_tenant_workflow_duration_milliseconds_bucket[1h]))) / 1000",
+          "legendFormat": "{{workflow_name}}",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "type": "row",
+      "title": "Footprint",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 41 },
+      "panels": []
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "RAM, % of Incus cap",
+      "description": "Working set as a percentage of the container's 1 GiB cap: 100 * (1 - incus_memory_MemAvailable_bytes / incus_memory_MemTotal_bytes) for name=bench-hatchet on the Incus metrics endpoint. bench-hatchet is an OCI container with no node_exporter, so the Incus job is the only footprint source for it. MemTotal here is the cap, and the figure is cgroup-scoped so it includes page cache charged to the container.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 42 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 15, "showPoints": "never", "thresholdsStyle": { "mode": "dashed" } },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "100 * (1 - incus_memory_MemAvailable_bytes{name=\"bench-hatchet\"} / incus_memory_MemTotal_bytes{name=\"bench-hatchet\"})",
+          "legendFormat": "{{name}}",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "CPU, % of one core",
+      "description": "sum by (name) (rate(incus_cpu_seconds_total{name=\"bench-hatchet\"}[5m])) * 100 from the Incus metrics endpoint, summed over the mode label (user + system). 100 means one core fully busy; the container can exceed 100 if it has more than one core allocated.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 42 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 15, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum by (name) (rate(incus_cpu_seconds_total{name=\"bench-hatchet\"}[5m])) * 100",
+          "legendFormat": "total",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum by (mode) (rate(incus_cpu_seconds_total{name=\"bench-hatchet\"}[5m])) * 100",
+          "legendFormat": "{{mode}}",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "type": "gauge",
+      "title": "RAM vs cap, now",
+      "description": "Current working set as a percentage of the 1 GiB Incus cap for bench-hatchet, from incus_memory_MemTotal_bytes minus incus_memory_MemAvailable_bytes.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 50 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "showThresholdMarkers": true, "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "100 * (1 - incus_memory_MemAvailable_bytes{name=\"bench-hatchet\"} / incus_memory_MemTotal_bytes{name=\"bench-hatchet\"})",
+          "legendFormat": "{{name}}",
+          "editorMode": "code",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "type": "timeseries",
+      "title": "Engine process detail",
+      "description": "Go runtime series scraped from the hatchet-lite process itself (job=hatchet, dogmatix:9090): process_resident_memory_bytes is the engine's own RSS, go_memstats_heap_inuse_bytes its live heap. Compare RSS against the container working set above — the gap is page cache and the rest of the container. Goroutine count is on the right axis as a leak indicator.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 6, "w": 18, "x": 6, "y": 50 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "goroutines" },
+            "properties": [
+              { "id": "unit", "value": "short" },
+              { "id": "custom.axisPlacement", "value": "right" },
+              { "id": "custom.fillOpacity", "value": 0 }
+            ]
+          }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "process_resident_memory_bytes{job=\"hatchet\"}",
+          "legendFormat": "process RSS",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "go_memstats_heap_inuse_bytes{job=\"hatchet\"}",
+          "legendFormat": "go heap in use",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "go_goroutines{job=\"hatchet\"}",
+          "legendFormat": "goroutines",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "type": "row",
+      "title": "Health",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 56 },
+      "panels": []
+    },
+    {
+      "id": 40,
+      "type": "stat",
+      "title": "Engine target up",
+      "description": "up{job=\"hatchet\"} — whether Prometheus can scrape the hatchet-lite metrics endpoint on dogmatix:9090. This says nothing about the REST poller, which runs separately on bench-obs.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 57 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red", "index": 0 }, "1": { "text": "UP", "color": "green", "index": 1 } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "up{job=\"hatchet\"}",
+          "legendFormat": "hatchet",
+          "editorMode": "code",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "type": "stat",
+      "title": "Queue poller up",
+      "description": "hatchet_poller_up from the REST poller's textfile output. Read this before believing any zero on the Queue depth row: a depth of 0 with the poller up means no work waiting, whereas a depth of 0 with the poller down means the last written file is simply stale.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 57 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "FAILING", "color": "red", "index": 0 }, "1": { "text": "OK", "color": "green", "index": 1 } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "hatchet_poller_up",
+          "legendFormat": "poller",
+          "editorMode": "code",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "type": "stat",
+      "title": "Queue metrics staleness",
+      "description": "time() - hatchet_poller_last_success_timestamp_seconds: seconds since the poller last completed a successful REST read. The poller carries this timestamp forward across a failed poll so the gap is measurable from the metric alone. Yellow past 120 s, red past 300 s — beyond that the queue-depth values on this dashboard are history, not state.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 57 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 120 },
+              { "color": "red", "value": 300 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "area", "textMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "time() - hatchet_poller_last_success_timestamp_seconds",
+          "legendFormat": "age",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 43,
+      "type": "stat",
+      "title": "Container OOM kills",
+      "description": "incus_memory_OOM_kills_total{name=\"bench-hatchet\"} — cumulative processes killed by the cgroup memory limit. Any increase means the 1 GiB cap was actually hit, not just approached.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 57 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "area", "textMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "incus_memory_OOM_kills_total{name=\"bench-hatchet\"}",
+          "legendFormat": "{{name}}",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 44,
+      "type": "timeseries",
+      "title": "Poller history",
+      "description": "hatchet_poller_up over time on the left axis and hatchet_poller_duration_seconds on the right: a dip in the first is a blind window in the queue-depth data, and a climb in the second means the Hatchet REST API is slowing down before it fails.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 63 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 20, "showPoints": "never" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "poll duration" },
+            "properties": [
+              { "id": "unit", "value": "s" },
+              { "id": "custom.axisPlacement", "value": "right" },
+              { "id": "custom.fillOpacity", "value": 0 },
+              { "id": "custom.lineInterpolation", "value": "smooth" }
+            ]
+          }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "hatchet_poller_up",
+          "legendFormat": "poller up",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "hatchet_poller_duration_seconds",
+          "legendFormat": "poll duration",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 45,
+      "type": "timeseries",
+      "title": "Tenant worker slots",
+      "description": "AWAITS FUTURE METRIC: hatchet_tenant_worker_slots, _used_worker_slots and _available_worker_slots are declared by hatchet-lite but export no samples on this deployment, so this panel is empty. The whole worker-slot family (including the _worker_label_slots variants) is silent, which means worker capacity and the label-matching that drives bench worker classes are not observable from Prometheus; worker presence has to be read over REST. The other hatchet_tenant_* families do carry a tenant_id label and do report.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 70 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "calcs": [] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum(hatchet_tenant_worker_slots)",
+          "legendFormat": "total slots",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum(hatchet_tenant_used_worker_slots)",
+          "legendFormat": "used slots",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum(hatchet_tenant_available_worker_slots)",
+          "legendFormat": "available slots",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    }
+  ]
+}

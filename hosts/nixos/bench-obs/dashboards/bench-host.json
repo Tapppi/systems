@@ -1,0 +1,1288 @@
+{
+  "uid": "bench-host",
+  "title": "Bench — Host (dogmatix)",
+  "description": "What the Incus host substrate costs and how much headroom is left: CPU, memory, ZFS/storage, network, and the aggregate footprint of the bench guests on dogmatix.",
+  "tags": ["bench", "host"],
+  "timezone": "browser",
+  "editable": false,
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "bench-prometheus", "value": "bench-prometheus" },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Summary",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "CPU busy",
+      "description": "Host CPU utilisation across all 4 cores: 100 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100 from node_exporter on dogmatix (role=\"host\"). The role selector is required — bench-obs is also scraped without a role label.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{role=\"host\",mode=\"idle\"}[5m])) * 100)",
+          "legendFormat": "cpu busy"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "RAM used",
+      "description": "Host memory in use as a share of the ~12 GB installed: 100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) on dogmatix. MemAvailable already discounts reclaimable page cache, but ZFS ARC is not fully reclaimable-accounted here — see the ARC panel.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "expr": "100 * (1 - node_memory_MemAvailable_bytes{role=\"host\"} / node_memory_MemTotal_bytes{role=\"host\"})",
+          "legendFormat": "ram used"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Root filesystem used",
+      "description": "eMMC root (/dev/mmcblk0p2, 60 GB ext4): 100 * (1 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}). The Nix store lives on the same device, so /nix/store tracks this figure.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "expr": "100 * (1 - node_filesystem_avail_bytes{role=\"host\",mountpoint=\"/\"} / node_filesystem_size_bytes{role=\"host\",mountpoint=\"/\"})",
+          "legendFormat": "/"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "ZFS pool capacity",
+      "description": "zpool_capacity_ratio{pool=\"vmpool\"} from the host textfile collector — zpool's own CAP column, already scaled 0-100. This is the NVMe pool backing every guest rootfs.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "expr": "zpool_capacity_ratio{pool=\"vmpool\"}",
+          "legendFormat": "{{pool}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Host uptime",
+      "description": "time() - node_boot_time_seconds on dogmatix. A reset here invalidates any in-flight bench window.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "expr": "time() - node_boot_time_seconds{role=\"host\"}",
+          "legendFormat": "uptime"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Load average (1m)",
+      "description": "node_load1 on dogmatix. Thresholds are set at the 4-core count (yellow) and 2x cores (red) — above 4 the run queue exceeds the N150's core count.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 4 },
+              { "color": "red", "value": 8 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "expr": "node_load1{role=\"host\"}",
+          "legendFormat": "load1"
+        }
+      ]
+    },
+
+    {
+      "id": 10,
+      "type": "row",
+      "title": "CPU",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "panels": []
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "CPU by mode",
+      "description": "Stacked per-mode utilisation: sum by (mode) (rate(node_cpu_seconds_total{mode!=\"idle\"}[5m])) divided by the core count, expressed as a percentage of the whole 4-core host. Guest CPU appears here as user/system on the host.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 25,
+            "showPoints": "never",
+            "stacking": { "mode": "normal", "group": "A" }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "100 * sum by (mode) (rate(node_cpu_seconds_total{role=\"host\",mode!=\"idle\"}[5m])) / on() group_left count(count by (cpu) (node_cpu_seconds_total{role=\"host\"}))",
+          "legendFormat": "{{mode}}"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Load average vs core count",
+      "description": "node_load1/5/15 on dogmatix against the physical core count, derived as count(count by (cpu) (node_cpu_seconds_total)) so the reference line stays correct if the host changes.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "cores" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "node_load1{role=\"host\"}",
+          "legendFormat": "load1"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "node_load5{role=\"host\"}",
+          "legendFormat": "load5"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "node_load15{role=\"host\"}",
+          "legendFormat": "load15"
+        },
+        {
+          "refId": "D",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "count(count by (cpu) (node_cpu_seconds_total{role=\"host\"}))",
+          "legendFormat": "cores"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "CPU pressure stall",
+      "description": "rate(node_pressure_cpu_waiting_seconds_total[5m]) on dogmatix — the fraction of wall time some runnable task spent waiting for a CPU. Sustained values above ~0.1 mean the 4 cores are the bench bottleneck, independent of what the CPU-busy figure says.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 14 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.1 },
+              { "color": "red", "value": 0.3 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "rate(node_pressure_cpu_waiting_seconds_total{role=\"host\"}[5m])",
+          "legendFormat": "cpu waiting"
+        }
+      ]
+    },
+
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Memory",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 20 },
+      "panels": []
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Memory breakdown",
+      "description": "node_memory_* on dogmatix: total installed, in-use (MemTotal - MemAvailable), available, and page cache. Guest working sets are charged to the host here, so in-use includes everything the bench guests hold.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 21 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "total" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+              { "id": "custom.fillOpacity", "value": 0 }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "node_memory_MemTotal_bytes{role=\"host\"}",
+          "legendFormat": "total"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "node_memory_MemTotal_bytes{role=\"host\"} - node_memory_MemAvailable_bytes{role=\"host\"}",
+          "legendFormat": "used"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "node_memory_MemAvailable_bytes{role=\"host\"}",
+          "legendFormat": "available"
+        },
+        {
+          "refId": "D",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "node_memory_Cached_bytes{role=\"host\"}",
+          "legendFormat": "cached"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "ZFS ARC vs cap",
+      "description": "node_zfs_arc_size against node_zfs_arc_c_max (the 4 GiB zfs_arc_max ceiling) and node_zfs_arc_c (the current adaptive target) on dogmatix. ARC growth eats host RAM that guests would otherwise get, so this is read alongside the memory breakdown.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 21 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "arc max (cap)" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+              { "id": "custom.fillOpacity", "value": 0 },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "node_zfs_arc_size{role=\"host\"}",
+          "legendFormat": "arc size"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "node_zfs_arc_c{role=\"host\"}",
+          "legendFormat": "arc target"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "node_zfs_arc_c_max{role=\"host\"}",
+          "legendFormat": "arc max (cap)"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "Swap",
+      "description": "node_memory_SwapTotal_bytes and used swap (SwapTotal - SwapFree) on dogmatix. The host runs with no swap device configured, so both lines sit at zero and any deviation means swap was added.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 29 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "node_memory_SwapTotal_bytes{role=\"host\"}",
+          "legendFormat": "swap total"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "node_memory_SwapTotal_bytes{role=\"host\"} - node_memory_SwapFree_bytes{role=\"host\"}",
+          "legendFormat": "swap used"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "Memory pressure stall",
+      "description": "rate(node_pressure_memory_waiting_seconds_total[5m]) and the stalled (full-stall) counterpart on dogmatix. Non-zero values mean reclaim is costing the bench wall time before any OOM kill shows up.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 29 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "rate(node_pressure_memory_waiting_seconds_total{role=\"host\"}[5m])",
+          "legendFormat": "memory waiting"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "rate(node_pressure_memory_stalled_seconds_total{role=\"host\"}[5m])",
+          "legendFormat": "memory stalled"
+        }
+      ]
+    },
+
+    {
+      "id": 30,
+      "type": "row",
+      "title": "Storage",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 36 },
+      "panels": []
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Filesystem used %",
+      "description": "100 * (1 - node_filesystem_avail_bytes / node_filesystem_size_bytes) per mountpoint on dogmatix. tmpfs, devtmpfs, ramfs, vfat and the lxcfs shim are excluded — they are either volatile or report zero size. / and /nix/store share the eMMC device; /vmpool datasets share the NVMe pool.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 37 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "thresholdsStyle": { "mode": "dashed" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "100 * (1 - node_filesystem_avail_bytes{role=\"host\",fstype!~\"tmpfs|devtmpfs|ramfs|vfat|fuse.lxcfs\"} / node_filesystem_size_bytes{role=\"host\",fstype!~\"tmpfs|devtmpfs|ramfs|vfat|fuse.lxcfs\"})",
+          "legendFormat": "{{mountpoint}}"
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Disk throughput",
+      "description": "rate(node_disk_read_bytes_total[5m]) and rate(node_disk_written_bytes_total[5m]) per whole device on dogmatix. Limited to mmcblk0 (eMMC root) and nvme0n1 (the vmpool NVMe); partitions and the boot devices are excluded to avoid double counting. Writes are drawn negative.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 37 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "rate(node_disk_read_bytes_total{role=\"host\",device=~\"nvme0n1|mmcblk0\"}[5m])",
+          "legendFormat": "{{device}} read"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "-rate(node_disk_written_bytes_total{role=\"host\",device=~\"nvme0n1|mmcblk0\"}[5m])",
+          "legendFormat": "{{device}} write"
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "type": "timeseries",
+      "title": "Disk IOPS",
+      "description": "rate(node_disk_reads_completed_total[5m]) and rate(node_disk_writes_completed_total[5m]) for nvme0n1 and mmcblk0 on dogmatix. Writes are drawn negative. ZFS batches writes into transaction groups, so NVMe write IOPS arrive in bursts every few seconds rather than smoothly.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 45 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "rate(node_disk_reads_completed_total{role=\"host\",device=~\"nvme0n1|mmcblk0\"}[5m])",
+          "legendFormat": "{{device}} reads"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "-rate(node_disk_writes_completed_total{role=\"host\",device=~\"nvme0n1|mmcblk0\"}[5m])",
+          "legendFormat": "{{device}} writes"
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "type": "bargauge",
+      "title": "ZFS pool vmpool",
+      "description": "Textfile-collector gauges from the host: zpool_capacity_ratio and zpool_fragmentation_ratio (both already 0-100) and zpool_health_online (1 = ONLINE). Fragmentation above ~50 on a copy-on-write pool degrades write latency for every guest.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 45 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "health online (1=ok)" },
+            "properties": [
+              { "id": "unit", "value": "short" },
+              { "id": "max", "value": 1 },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "red", "value": null },
+                    { "color": "green", "value": 1 }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "displayMode": "lcd",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "expr": "zpool_capacity_ratio{pool=\"vmpool\"}",
+          "legendFormat": "capacity"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "expr": "zpool_fragmentation_ratio{pool=\"vmpool\"}",
+          "legendFormat": "fragmentation"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "expr": "zpool_health_online{pool=\"vmpool\"}",
+          "legendFormat": "health online (1=ok)"
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "type": "timeseries",
+      "title": "ZFS ARC hit ratio",
+      "description": "rate(node_zfs_arc_hits[5m]) / (hits + misses) on dogmatix. With ARC capped at 4 GiB, a falling ratio during a bench run is the signal that the working set has outgrown the cache and reads are hitting NVMe.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 53 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["mean", "min"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "rate(node_zfs_arc_hits{role=\"host\"}[5m]) / (rate(node_zfs_arc_hits{role=\"host\"}[5m]) + rate(node_zfs_arc_misses{role=\"host\"}[5m]))",
+          "legendFormat": "arc hit ratio"
+        }
+      ]
+    },
+    {
+      "id": 36,
+      "type": "timeseries",
+      "title": "IO pressure stall",
+      "description": "rate(node_pressure_io_waiting_seconds_total[5m]) and the stalled counterpart on dogmatix. This is the storage-side equivalent of the CPU pressure panel and is the cleanest indicator that eMMC or NVMe latency is limiting the bench.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 53 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "rate(node_pressure_io_waiting_seconds_total{role=\"host\"}[5m])",
+          "legendFormat": "io waiting"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "rate(node_pressure_io_stalled_seconds_total{role=\"host\"}[5m])",
+          "legendFormat": "io stalled"
+        }
+      ]
+    },
+
+    {
+      "id": 40,
+      "type": "row",
+      "title": "Network",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 60 },
+      "panels": []
+    },
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "Network receive",
+      "description": "rate(node_network_receive_bytes_total[5m]) on dogmatix for enp4s0/enp5s0 (the two physical NICs), tailscale0 (remote access), and incusbr0. incusbr0 is included deliberately and carries guest-to-guest and guest-to-outside traffic, so it is the bench's own network cost seen from the host. lo and the per-guest veth* pairs are excluded: veth traffic duplicates incusbr0 and is broken out per guest on the Incus Guests dashboard.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 61 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "rate(node_network_receive_bytes_total{role=\"host\",device=~\"enp.*|incusbr0|tailscale0\"}[5m])",
+          "legendFormat": "{{device}}"
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "type": "timeseries",
+      "title": "Network transmit",
+      "description": "rate(node_network_transmit_bytes_total[5m]) on dogmatix for the same device set as the receive panel: enp4s0/enp5s0, tailscale0, and incusbr0 (guest traffic).",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 61 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "rate(node_network_transmit_bytes_total{role=\"host\",device=~\"enp.*|incusbr0|tailscale0\"}[5m])",
+          "legendFormat": "{{device}}"
+        }
+      ]
+    },
+
+    {
+      "id": 50,
+      "type": "row",
+      "title": "Guest aggregate",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 69 },
+      "panels": []
+    },
+    {
+      "id": 51,
+      "type": "stat",
+      "title": "Guests reporting",
+      "description": "count(incus_memory_MemTotal_bytes) from the Incus metrics endpoint — every running container, including bench-pg and bench-hatchet which carry no node_exporter. The bench expects 5.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 70 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "expr": "count(incus_memory_MemTotal_bytes)",
+          "legendFormat": "guests"
+        }
+      ]
+    },
+    {
+      "id": 52,
+      "type": "stat",
+      "title": "Guest RAM (working set)",
+      "description": "sum(incus_memory_MemTotal_bytes - incus_memory_MemAvailable_bytes) across all guests — the bench convention for guest working set, cgroup-derived and inclusive of page cache charged to the guest.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 70 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "expr": "sum(incus_memory_MemTotal_bytes - incus_memory_MemAvailable_bytes)",
+          "legendFormat": "guest working set"
+        }
+      ]
+    },
+    {
+      "id": 53,
+      "type": "stat",
+      "title": "Guest CPU (of one core)",
+      "description": "sum(rate(incus_cpu_seconds_total[2m])) * 100 across all guests, in percent of a single core. The host has 4 cores, so 400 would be full saturation by the bench alone.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 70 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 400,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 280 },
+              { "color": "red", "value": 360 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "expr": "sum(rate(incus_cpu_seconds_total[2m])) * 100",
+          "legendFormat": "guest cpu"
+        }
+      ]
+    },
+    {
+      "id": 54,
+      "type": "stat",
+      "title": "Bench share of host RAM",
+      "description": "Guest working set as a percentage of installed host RAM: 100 * sum(incus_memory_MemTotal_bytes - incus_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes{role=\"host\"}. This is the direct answer to how much of dogmatix the bench costs in memory.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 70 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "expr": "100 * sum(incus_memory_MemTotal_bytes - incus_memory_MemAvailable_bytes) / scalar(node_memory_MemTotal_bytes{role=\"host\"})",
+          "legendFormat": "bench share"
+        }
+      ]
+    },
+    {
+      "id": 55,
+      "type": "timeseries",
+      "title": "Guest RAM vs host memory",
+      "description": "Aggregate guest working set from the Incus job against host used memory and total installed RAM. The gap between the guest sum and host used is the host's own footprint — kernel, ZFS ARC, Incus daemon, node_exporter.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 75 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "host total" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+              { "id": "custom.fillOpacity", "value": 0 },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum(incus_memory_MemTotal_bytes - incus_memory_MemAvailable_bytes)",
+          "legendFormat": "guests (working set)"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "node_memory_MemTotal_bytes{role=\"host\"} - node_memory_MemAvailable_bytes{role=\"host\"}",
+          "legendFormat": "host used"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "node_memory_MemTotal_bytes{role=\"host\"}",
+          "legendFormat": "host total"
+        }
+      ]
+    },
+    {
+      "id": 56,
+      "type": "timeseries",
+      "title": "Guest CPU vs host CPU",
+      "description": "Aggregate guest CPU from the Incus job (percent of one core, so 400 = all 4 cores) against host busy CPU rescaled to the same axis. Divergence means CPU is being spent outside the containers — ZFS, the Incus daemon, or host-side IO.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 75 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum(rate(incus_cpu_seconds_total[2m])) * 100",
+          "legendFormat": "guests (of one core)"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum(rate(node_cpu_seconds_total{role=\"host\",mode!=\"idle\"}[2m])) * 100",
+          "legendFormat": "host busy (of one core)"
+        }
+      ]
+    }
+  ]
+}

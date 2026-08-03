@@ -1,0 +1,885 @@
+{
+  "uid": "bench-incus",
+  "title": "Bench — Incus Guests",
+  "description": "Per-guest L1/L2 footprint of the bench containers as measured by the Incus metrics endpoint: RAM against cap, CPU, disk, and network for every container including the ones with no node_exporter.",
+  "tags": ["bench", "incus"],
+  "timezone": "browser",
+  "editable": false,
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "bench-prometheus", "value": "bench-prometheus" },
+        "hide": 0
+      },
+      {
+        "name": "guest",
+        "label": "Guest",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${ds}" },
+        "query": "label_values(incus_memory_MemTotal_bytes, name)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "sort": 1,
+        "current": { "text": ["All"], "value": ["$__all"] },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Overview",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Per-guest footprint",
+      "description": "One row per container from the Incus metrics endpoint. RAM cap is incus_memory_MemTotal_bytes (the cgroup limit). Working set is cap minus incus_memory_MemAvailable_bytes, the bench convention — it includes page cache charged to the guest. Anon is Active_anon + Inactive_anon and approximates the sum of process RSS. CPU is sum by (name) (rate(incus_cpu_seconds_total[2m])) * 100, in percent of one core, so 400 is the whole 4-core host. Per-guest uptime is not exposed by this endpoint: incus_uptime_seconds carries no name label and reports the daemon's uptime.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "align": "auto", "cellOptions": { "type": "auto" } }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "RAM cap" },
+            "properties": [{ "id": "unit", "value": "bytes" }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "RAM working set" },
+            "properties": [{ "id": "unit", "value": "bytes" }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "RAM anon" },
+            "properties": [{ "id": "unit", "value": "bytes" }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "RAM % of cap" },
+            "properties": [
+              { "id": "unit", "value": "percent" },
+              { "id": "decimals", "value": 1 },
+              { "id": "min", "value": 0 },
+              { "id": "max", "value": 100 },
+              {
+                "id": "custom.cellOptions",
+                "value": { "type": "gauge", "mode": "gradient" }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 70 },
+                    { "color": "red", "value": 90 }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "CPU % of one core" },
+            "properties": [
+              { "id": "unit", "value": "percent" },
+              { "id": "decimals", "value": 1 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Procs" },
+            "properties": [{ "id": "decimals", "value": 0 }]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [{ "displayName": "RAM % of cap", "desc": true }]
+      },
+      "transformations": [
+        { "id": "joinByField", "options": { "byField": "name", "mode": "outer" } },
+        { "id": "filterFieldsByName", "options": { "exclude": { "pattern": "^Time.*" } } },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "name": "Guest",
+              "Value #A": "RAM cap",
+              "Value #B": "RAM working set",
+              "Value #C": "RAM % of cap",
+              "Value #D": "RAM anon",
+              "Value #E": "CPU % of one core",
+              "Value #F": "Procs"
+            }
+          }
+        }
+      ],
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "expr": "max by (name) (incus_memory_MemTotal_bytes{name=~\"$guest\"})",
+          "legendFormat": "{{name}}"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "expr": "max by (name) (incus_memory_MemTotal_bytes{name=~\"$guest\"} - incus_memory_MemAvailable_bytes{name=~\"$guest\"})",
+          "legendFormat": "{{name}}"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "expr": "max by (name) (100 * (incus_memory_MemTotal_bytes{name=~\"$guest\"} - incus_memory_MemAvailable_bytes{name=~\"$guest\"}) / incus_memory_MemTotal_bytes{name=~\"$guest\"})",
+          "legendFormat": "{{name}}"
+        },
+        {
+          "refId": "D",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "expr": "max by (name) (incus_memory_Active_anon_bytes{name=~\"$guest\"} + incus_memory_Inactive_anon_bytes{name=~\"$guest\"})",
+          "legendFormat": "{{name}}"
+        },
+        {
+          "refId": "E",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "expr": "sum by (name) (rate(incus_cpu_seconds_total{name=~\"$guest\"}[2m])) * 100",
+          "legendFormat": "{{name}}"
+        },
+        {
+          "refId": "F",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "expr": "max by (name) (incus_procs_total{name=~\"$guest\"})",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    },
+
+    {
+      "id": 10,
+      "type": "row",
+      "title": "RAM",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 10 },
+      "panels": []
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Working set vs cap",
+      "description": "Solid lines: incus_memory_MemTotal_bytes - incus_memory_MemAvailable_bytes per guest. Dashed lines: incus_memory_MemTotal_bytes, the cgroup RAM cap each guest is configured with. A solid line converging on its dash means that guest is about to reclaim hard or OOM.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 11 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": ".*cap$" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+              { "id": "custom.fillOpacity", "value": 0 }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "max by (name) (incus_memory_MemTotal_bytes{name=~\"$guest\"} - incus_memory_MemAvailable_bytes{name=~\"$guest\"})",
+          "legendFormat": "{{name}}"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "max by (name) (incus_memory_MemTotal_bytes{name=~\"$guest\"})",
+          "legendFormat": "{{name}} cap"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "RAM % of cap",
+      "description": "100 * (incus_memory_MemTotal_bytes - incus_memory_MemAvailable_bytes) / incus_memory_MemTotal_bytes per guest. Thresholds mark 70% (headroom shrinking) and 90% (reclaim territory); the caps are small enough that these are meaningful margins.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 11 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "thresholdsStyle": { "mode": "dashed" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "max by (name) (100 * (incus_memory_MemTotal_bytes{name=~\"$guest\"} - incus_memory_MemAvailable_bytes{name=~\"$guest\"}) / incus_memory_MemTotal_bytes{name=~\"$guest\"})",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Anonymous RAM",
+      "description": "incus_memory_Active_anon_bytes + incus_memory_Inactive_anon_bytes per guest — the bench convention for approximate process RSS. Unlike working set this excludes page cache, so it is the figure to compare between engines.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 19 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "max by (name) (incus_memory_Active_anon_bytes{name=~\"$guest\"} + incus_memory_Inactive_anon_bytes{name=~\"$guest\"})",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Page cache",
+      "description": "incus_memory_Cached_bytes per guest — the reclaimable part of the working set. The difference between this panel and the anon panel explains most of the gap between working set and RSS.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 19 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "max by (name) (incus_memory_Cached_bytes{name=~\"$guest\"})",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "OOM kills in range",
+      "description": "increase(incus_memory_OOM_kills_total[$__range]) per guest. Any non-zero value invalidates the bench window it appears in — the guest hit its cgroup RAM cap and the kernel killed a process inside it. Guests with no kills over the selected range read zero.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 5, "w": 12, "x": 0, "y": 27 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "none",
+        "colorMode": "background",
+        "textMode": "value_and_name",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "instant": true,
+          "range": false,
+          "expr": "increase(incus_memory_OOM_kills_total{name=~\"$guest\"}[$__range])",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Swap in use",
+      "description": "incus_memory_Swap_bytes per guest. The containers run without swap, so this is a flat zero and any rise means swap was enabled somewhere — which would make every RAM figure on this dashboard incomparable with earlier bench phases.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 27 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "max by (name) (incus_memory_Swap_bytes{name=~\"$guest\"})",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    },
+
+    {
+      "id": 20,
+      "type": "row",
+      "title": "CPU",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+      "panels": []
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "CPU % of one core",
+      "description": "sum by (name) (rate(incus_cpu_seconds_total[2m])) * 100 — the bench convention. The raw series is split by cpu and mode, so the sum is required. 100 is one full core of the 4 on dogmatix.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum by (name) (rate(incus_cpu_seconds_total{name=~\"$guest\"}[2m])) * 100",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "CPU % of effective allocation",
+      "description": "Guest CPU divided by incus_cpu_effective_total: sum by (name) (rate(incus_cpu_seconds_total[2m])) * 100 / incus_cpu_effective_total. Every guest currently reports an effective allocation of 4, meaning no per-guest CPU limit is set and all containers share all four host cores — so this panel reads as each guest's share of the whole host. It becomes a genuine per-guest saturation measure once limits.cpu is pinned on any container.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "thresholdsStyle": { "mode": "dashed" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum by (name) (rate(incus_cpu_seconds_total{name=~\"$guest\"}[2m])) * 100 / on (name) group_left max by (name) (incus_cpu_effective_total{name=~\"$guest\"})",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    },
+
+    {
+      "id": 30,
+      "type": "row",
+      "title": "Disk",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 41 },
+      "panels": []
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Disk throughput",
+      "description": "sum by (name) (rate(incus_disk_read_bytes_total[5m])) with writes drawn negative from incus_disk_written_bytes_total. Summed over the backing block devices (nvme0n1 for the vmpool datasets). Reads are accounted normally; the write counters barely move for these ZFS-backed containers because copy-on-write flushes land in host-level transaction groups rather than per-container blkio accounting, so guest write volume is read from the Disk throughput panel on the Host dashboard instead.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 42 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum by (name) (rate(incus_disk_read_bytes_total{name=~\"$guest\"}[5m]))",
+          "legendFormat": "{{name}} read"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "-sum by (name) (rate(incus_disk_written_bytes_total{name=~\"$guest\"}[5m]))",
+          "legendFormat": "{{name}} write"
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Disk IOPS",
+      "description": "sum by (name) (rate(incus_disk_reads_completed_total[5m])) with writes drawn negative from incus_disk_writes_completed_total. The same ZFS accounting caveat as the throughput panel applies: read IOPS are populated, write IOPS stay near zero.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 42 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum by (name) (rate(incus_disk_reads_completed_total{name=~\"$guest\"}[5m]))",
+          "legendFormat": "{{name}} reads"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "-sum by (name) (rate(incus_disk_writes_completed_total{name=~\"$guest\"}[5m]))",
+          "legendFormat": "{{name}} writes"
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "type": "timeseries",
+      "title": "Filesystem used",
+      "description": "incus_filesystem_size_bytes - incus_filesystem_free_bytes per guest and mountpoint. This is the useful figure because the datasets carry no quota: every mount reports the whole vmpool as its size, so a percentage would be meaningless. bench-pg contributes a second row for the /var/lib/postgresql/data custom volume.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 50 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "max by (name, mountpoint) (incus_filesystem_size_bytes{name=~\"$guest\"} - incus_filesystem_free_bytes{name=~\"$guest\"})",
+          "legendFormat": "{{name}} {{mountpoint}}"
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "type": "timeseries",
+      "title": "Filesystem free",
+      "description": "incus_filesystem_avail_bytes per guest and mountpoint. All datasets draw from the same vmpool, so these lines move together and track pool free space rather than any per-guest quota.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 50 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "max by (name, mountpoint) (incus_filesystem_avail_bytes{name=~\"$guest\"})",
+          "legendFormat": "{{name}} {{mountpoint}}"
+        }
+      ]
+    },
+
+    {
+      "id": 40,
+      "type": "row",
+      "title": "Network",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 58 },
+      "panels": []
+    },
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "Network receive",
+      "description": "rate(incus_network_receive_bytes_total[5m]) per guest and interface. eth0 is the incusbr0-attached bench network, tailscale0 is remote access, and lo is intra-guest traffic — for bench-pg and bench-temporal the lo volume is the local client-to-server path and is often the largest series here.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 59 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum by (name, device) (rate(incus_network_receive_bytes_total{name=~\"$guest\"}[5m]))",
+          "legendFormat": "{{name}} {{device}}"
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "type": "timeseries",
+      "title": "Network transmit",
+      "description": "rate(incus_network_transmit_bytes_total[5m]) per guest and interface, same interface set as the receive panel.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 59 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum by (name, device) (rate(incus_network_transmit_bytes_total{name=~\"$guest\"}[5m]))",
+          "legendFormat": "{{name}} {{device}}"
+        }
+      ]
+    },
+    {
+      "id": 43,
+      "type": "timeseries",
+      "title": "Packet rate",
+      "description": "rate(incus_network_receive_packets_total[5m]) and rate(incus_network_transmit_packets_total[5m]) per guest and interface, transmit drawn negative. Packet rate against byte rate distinguishes a chatty small-message workload from a bulk-transfer one, which is the interesting difference between the queue engines.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 67 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum by (name, device) (rate(incus_network_receive_packets_total{name=~\"$guest\"}[5m]))",
+          "legendFormat": "{{name}} {{device}} rx"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "-sum by (name, device) (rate(incus_network_transmit_packets_total{name=~\"$guest\"}[5m]))",
+          "legendFormat": "{{name}} {{device}} tx"
+        }
+      ]
+    },
+    {
+      "id": 44,
+      "type": "timeseries",
+      "title": "Network errors and drops",
+      "description": "Rates of incus_network_receive_errs_total, transmit_errs_total, receive_drop_total and transmit_drop_total per guest, summed across interfaces. Any sustained non-zero value here means the bench's own network is losing traffic and latency figures from that window are suspect.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 67 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum by (name) (rate(incus_network_receive_errs_total{name=~\"$guest\"}[5m]))",
+          "legendFormat": "{{name}} rx errs"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum by (name) (rate(incus_network_transmit_errs_total{name=~\"$guest\"}[5m]))",
+          "legendFormat": "{{name}} tx errs"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum by (name) (rate(incus_network_receive_drop_total{name=~\"$guest\"}[5m]))",
+          "legendFormat": "{{name}} rx drops"
+        },
+        {
+          "refId": "D",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "editorMode": "code",
+          "range": true,
+          "expr": "sum by (name) (rate(incus_network_transmit_drop_total{name=~\"$guest\"}[5m]))",
+          "legendFormat": "{{name}} tx drops"
+        }
+      ]
+    }
+  ]
+}

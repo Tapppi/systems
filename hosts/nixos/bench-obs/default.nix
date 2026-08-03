@@ -166,9 +166,28 @@
       enable = true;
       datasources.settings.datasources = [{
         name = "bench-prometheus";
+        # Fixed so provisioned dashboards can name the datasource without a
+        # per-deploy lookup; they select it through a `ds` dashboard variable
+        # defaulting to this name. Grafana cannot re-point an *existing*
+        # datasource at a new uid — changing this value needs a
+        # deleteDatasources entry alongside it, or Grafana refuses to start.
+        uid = "bench-prometheus";
         type = "prometheus";
         url = "http://localhost:9090";
         isDefault = true;
+      }];
+      # Dashboards are repo artifacts, not click-built state: Grafana loads
+      # the JSON from the store and refuses UI edits, so a redeploy always
+      # restores exactly what is committed here.
+      dashboards.settings.providers = [{
+        name = "bench";
+        type = "file";
+        folder = "Bench";
+        allowUiUpdates = false;
+        options = {
+          path = ./dashboards;
+          foldersFromFilesStructure = false;
+        };
       }];
     };
   };

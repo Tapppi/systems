@@ -1,0 +1,898 @@
+{
+  "uid": "bench-temporal",
+  "title": "Bench — Temporal",
+  "description": "Per-engine view of the Temporal bench guest: queue depth from both the truthful poller and the native gauge, throughput and history growth, gRPC and persistence latency, footprint against its 1536 MiB Incus cap, and whether the server and its poller are reporting.",
+  "tags": ["bench", "engine", "temporal"],
+  "timezone": "browser",
+  "editable": false,
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "bench-prometheus", "value": "bench-prometheus" },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Queue depth",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Queue depth by queue — poller vs native",
+      "description": "Two sources for the same number, drawn together. Trust the solid `poller` lines: temporal_taskqueue_backlog_count from the temporal-queue-metrics timer on bench-temporal (job=node, instance=bench-temporal:9100, textfile collector), which calls DescribeTaskQueue with reportStats=true. That call reads the backlog counter out of persistence and loads the partition to answer it, so it is correct from cold and already summed across partitions. The dashed `native` lines are the server's own approximate_backlog_count, summed as sum by (taskqueue, task_type) because the raw metric is per matching partition; its taskqueue label sanitises `-` to `_`, so bench-gpu reads bench_gpu. Matching unloads an idle partition after about five minutes, at which point the native series decays to zero and then stops being exported entirely — exactly in the state that matters, work queued with no worker polling. A native line that vanishes while a poller line stays above zero is that failure, on screen.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": ".*native.*" },
+            "properties": [
+              { "id": "custom.fillOpacity", "value": 0 },
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } }
+            ]
+          }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "max by (task_queue, task_type) (temporal_taskqueue_backlog_count{namespace=\"default\"})",
+          "legendFormat": "{{task_queue}} {{task_type}} poller",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum by (taskqueue, task_type) (approximate_backlog_count{namespace!=\"temporal_system\", taskqueue!~\"temporal_sys.*\"})",
+          "legendFormat": "{{taskqueue}} {{task_type}} native",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "bargauge",
+      "title": "Current depth per queue",
+      "description": "Latest temporal_taskqueue_backlog_count per bench task queue and task type, from the poller. Both bench queues and both task types are written on every poll run, so a missing bar means the poller stopped rather than that a queue drained — check the Health row.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 25 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "displayMode": "gradient", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "max by (task_queue, task_type) (temporal_taskqueue_backlog_count{namespace=\"default\"})",
+          "legendFormat": "{{task_queue}} {{task_type}}",
+          "editorMode": "code",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Total work waiting",
+      "description": "Sum of temporal_taskqueue_backlog_count across both bench task queues and both task types, from the poller. Zero here is only meaningful when temporal_poller_up is 1.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "graphMode": "area", "textMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum(max by (task_queue, task_type) (temporal_taskqueue_backlog_count{namespace=\"default\"}))",
+          "legendFormat": "waiting",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Partition residency and no-poller tasks",
+      "description": "Why the native gauge on the left comes and goes. loaded_task_queue_count per namespace and task type is how many task-queue partitions the matching service currently holds in memory; a partition idle for about five minutes is unloaded and its approximate_backlog_count series disappears with it. no_poller_tasks (summed by taskqueue) counts tasks matching found with no poller waiting — the server-side name for the wake-on-LAN condition. Polling on the timer keeps partitions resident, so a flat loaded count here is the poller doing that as a side effect.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": "no-poller.*" },
+            "properties": [
+              { "id": "custom.axisPlacement", "value": "right" },
+              { "id": "custom.fillOpacity", "value": 0 },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }
+            ]
+          }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum by (namespace, task_type) (loaded_task_queue_count{namespace!=\"temporal_system\"})",
+          "legendFormat": "loaded {{namespace}} {{task_type}}",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum by (taskqueue) (no_poller_tasks{namespace!=\"temporal_system\"})",
+          "legendFormat": "no-poller {{taskqueue}}",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Running workflows and backlog age",
+      "description": "temporal_taskqueue_running_workflows per queue on the left axis, counted by the poller from the visibility store with an ExecutionStatus='Running' AND TaskQueue=… query — independent of matching, so it still answers after an idle partition unloads. temporal_taskqueue_backlog_age_seconds is on the right axis: it reads 0 s on the first sample after a partition reload and is accurate from the next one on, so it is only meaningful while the timer has been running continuously. Alert on the count, not on this.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": "age .*" },
+            "properties": [
+              { "id": "unit", "value": "s" },
+              { "id": "custom.axisPlacement", "value": "right" },
+              { "id": "custom.fillOpacity", "value": 0 }
+            ]
+          }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum by (task_queue) (temporal_taskqueue_running_workflows)",
+          "legendFormat": "running {{task_queue}}",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "max by (task_queue, task_type) (temporal_taskqueue_backlog_age_seconds{namespace=\"default\"})",
+          "legendFormat": "age {{task_queue}} {{task_type}}",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Throughput",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
+      "panels": []
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Workflow completion rate",
+      "description": "Per-second rate of workflow_success by workflowType, from the history service's CompletionStats scope, with the internal temporal_system namespace excluded so the bench workloads are not swamped by Temporal's own scanner workflows. state_transition_count_count is on the same axis as an all-namespace measure of how much mutable-state work the engine is doing per second, which stays non-zero for long-running workflows that complete nothing.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum by (workflowType) (rate(workflow_success{namespace!=\"temporal_system\"}[5m]))",
+          "legendFormat": "{{workflowType}}",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum(rate(state_transition_count_count{namespace!=\"temporal_system\"}[5m]))",
+          "legendFormat": "state transitions",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum by (taskqueue) (rate(poll_success{namespace!=\"temporal_system\", taskqueue!~\"temporal_sys.*\"}[5m]))",
+          "legendFormat": "dispatched {{taskqueue}}",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Service and persistence request rate",
+      "description": "rate(service_requests[5m]) summed by service_name — Temporal runs frontend, history, matching and worker as roles inside one process here, and this splits the gRPC load between them. rate(persistence_requests[5m]) summed across operations is the total round-trip rate against bench-pg on the right axis: it is the cost side of the throughput on the left, and it never falls to zero because shard and task-queue upkeep keeps writing.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "persistence" },
+            "properties": [
+              { "id": "custom.axisPlacement", "value": "right" },
+              { "id": "custom.fillOpacity", "value": 0 }
+            ]
+          }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum by (service_name) (rate(service_requests[5m]))",
+          "legendFormat": "{{service_name}}",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum(rate(persistence_requests[5m]))",
+          "legendFormat": "persistence",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "History size per workflow",
+      "description": "p95 of the history_size histogram in bytes on the left axis and of history_count in events on the right, both scoped to operation=ExecutionStats and with temporal_system excluded. Temporal charges every workflow the full replay history it accumulates, so this is the per-workflow storage cost that drives the database sizes on the right-hand panel. Buckets are recorded when a workflow's execution stats are emitted, so a window with no workflow activity reads NaN and draws no line.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 25 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "auto" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "p95 events" },
+            "properties": [
+              { "id": "unit", "value": "short" },
+              { "id": "custom.axisPlacement", "value": "right" },
+              { "id": "custom.fillOpacity", "value": 0 }
+            ]
+          }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "histogram_quantile(0.95, sum by (le) (increase(history_size_bucket{namespace!=\"temporal_system\", operation=\"ExecutionStats\"}[1h])))",
+          "legendFormat": "p95 bytes",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "histogram_quantile(0.95, sum by (le) (increase(history_count_bucket{namespace!=\"temporal_system\", operation=\"ExecutionStats\"}[1h])))",
+          "legendFormat": "p95 events",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Temporal database size",
+      "description": "pg_database_size_bytes{datname=~\"temporal.*\"} from the postgres_exporter on bench-pg: the `temporal` database holds mutable state and event history, `temporal_visibility` the searchable execution index. Storage cost per workflow is a scored bench dimension, and these two lines are where it lands — visibility grows per execution regardless of history length, so the two climb at different rates. Neither shrinks until the retention scavenger deletes closed executions.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 25 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "pg_database_size_bytes{datname=~\"temporal.*\"}",
+          "legendFormat": "{{datname}}",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "row",
+      "title": "Latency",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+      "panels": []
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Frontend gRPC p95 by operation",
+      "description": "histogram_quantile(0.95, sum by (le, operation) (increase(service_latency_bucket{service_name=\"frontend\"}[1h]))) over the client-facing calls the bench uses. Restricted to service_name=frontend and to non-long-poll operations on purpose: the matching and history roles record PollWorkflowTaskQueue and PollActivityTaskQueue in the same histogram, and a long poll legitimately takes its full timeout, so an unfiltered p95 across service_name reads in the hundreds of seconds and means nothing. An operation with no calls in the window reads NaN and draws no line.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 0, "showPoints": "auto" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "histogram_quantile(0.95, sum by (le, operation) (increase(service_latency_bucket{service_name=\"frontend\", operation=~\"StartWorkflowExecution|SignalWorkflowExecution|RespondWorkflowTaskCompleted|RespondActivityTaskCompleted|DescribeTaskQueue|QueryWorkflow|CountWorkflowExecutions|ListWorkflowExecutions\"}[1h])))",
+          "legendFormat": "{{operation}}",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Persistence p95, slowest operations",
+      "description": "topk(8, histogram_quantile(0.95, sum by (le, operation) (increase(persistence_latency_bucket[1h])))) — the eight slowest persistence round trips against bench-pg. GetWorkflowExecution and UpdateWorkflowExecution are the hot path for every workflow task, so they set the floor on end-to-end latency; the L2 result that Postgres, not any engine, is the load bottleneck shows up here first as these two climbing while the frontend panel stays flat.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 0, "showPoints": "auto" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "topk(8, histogram_quantile(0.95, sum by (le, operation) (increase(persistence_latency_bucket[1h]))))",
+          "legendFormat": "{{operation}}",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "type": "row",
+      "title": "Footprint",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 41 },
+      "panels": []
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "RAM, % of Incus cap",
+      "description": "Working set as a percentage of the guest's 1536 MiB cap, measured two ways: the Incus metrics endpoint (100 * (1 - incus_memory_MemAvailable_bytes / incus_memory_MemTotal_bytes) for name=bench-temporal) and, as a cross-check, the same ratio from the guest's own node_exporter. bench-temporal is a NixOS guest, so both views exist and should track each other; a divergence means one of the two is measuring a different cgroup scope.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 42 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 15, "showPoints": "never", "thresholdsStyle": { "mode": "dashed" } },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "guest view" }, "properties": [{ "id": "custom.fillOpacity", "value": 0 }] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "100 * (1 - incus_memory_MemAvailable_bytes{name=\"bench-temporal\"} / incus_memory_MemTotal_bytes{name=\"bench-temporal\"})",
+          "legendFormat": "incus view",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "100 * (1 - node_memory_MemAvailable_bytes{instance=\"bench-temporal:9100\"} / node_memory_MemTotal_bytes{instance=\"bench-temporal:9100\"})",
+          "legendFormat": "guest view",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "CPU, % of one core",
+      "description": "sum by (name) (rate(incus_cpu_seconds_total{name=\"bench-temporal\"}[2m])) * 100 from the Incus metrics endpoint. incus_cpu_seconds_total is split by both cpu and mode, so the sum is required or the panel draws one line per core per mode. The guest's own non-idle CPU fraction from node_cpu_seconds_total is the cross-check. 100 means one core fully busy, on a 4-core host.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 42 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 15, "showPoints": "never" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "guest view" }, "properties": [{ "id": "custom.fillOpacity", "value": 0 }] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum by (name) (rate(incus_cpu_seconds_total{name=\"bench-temporal\"}[2m])) * 100",
+          "legendFormat": "incus view",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "100 * (1 - sum(rate(node_cpu_seconds_total{instance=\"bench-temporal:9100\",mode=\"idle\"}[5m])) / sum(rate(node_cpu_seconds_total{instance=\"bench-temporal:9100\"}[5m])))",
+          "legendFormat": "guest view",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "type": "gauge",
+      "title": "RAM vs cap, now",
+      "description": "Current working set as a percentage of the 1536 MiB Incus cap for bench-temporal, from incus_memory_MemTotal_bytes minus incus_memory_MemAvailable_bytes.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 50 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "showThresholdMarkers": true, "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "100 * (1 - incus_memory_MemAvailable_bytes{name=\"bench-temporal\"} / incus_memory_MemTotal_bytes{name=\"bench-temporal\"})",
+          "legendFormat": "{{name}}",
+          "editorMode": "code",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "type": "timeseries",
+      "title": "Resident set and history cache, 7 days",
+      "description": "Fixed to a 7-day window regardless of the dashboard time picker, because the thing it exists to show is slow: Temporal's resident set climbs under load and does not come back down. Working set is the Incus cgroup figure, Go heap in use is max(memory_heapinuse) across the four service_name roles (frontend, history, matching and worker share one process here, so the four series are the same number), and page cache is the guest's own node_exporter. The history event and mutable-state caches are on the right axis in entries — they are the mechanism: entries are admitted and not evicted, so a heap that rises with cache_usage and then stays flat at the new level is cache growth rather than a leak. A process-level RSS series is not available; the node_exporter processes collector is off on this guest and the Temporal server exports no process_resident_memory_bytes, so the Go heap plus the working set are the two available views.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 6, "w": 18, "x": 6, "y": 50 },
+      "timeFrom": "7d",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": "cache .*" },
+            "properties": [
+              { "id": "unit", "value": "short" },
+              { "id": "custom.axisPlacement", "value": "right" },
+              { "id": "custom.fillOpacity", "value": 0 }
+            ]
+          }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "incus_memory_MemTotal_bytes{name=\"bench-temporal\"} - incus_memory_MemAvailable_bytes{name=\"bench-temporal\"}",
+          "legendFormat": "working set",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "max(memory_heapinuse)",
+          "legendFormat": "go heap in use",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "node_memory_Cached_bytes{instance=\"bench-temporal:9100\"}",
+          "legendFormat": "page cache",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "D",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum by (cache_type) (cache_usage)",
+          "legendFormat": "cache {{cache_type}}",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "type": "row",
+      "title": "Health",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 56 },
+      "panels": []
+    },
+    {
+      "id": 40,
+      "type": "stat",
+      "title": "Engine target up",
+      "description": "up{job=\"temporal\"} — whether Prometheus can scrape the Temporal server's metrics endpoint on bench-temporal:9091. This says nothing about the queue poller, which writes a textfile scraped through the guest's node_exporter on port 9100.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 57 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red", "index": 0 }, "1": { "text": "UP", "color": "green", "index": 1 } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "up{job=\"temporal\"}",
+          "legendFormat": "temporal",
+          "editorMode": "code",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "type": "stat",
+      "title": "Queue poller up",
+      "description": "temporal_poller_up from the temporal-queue-metrics textfile output: 1 only when every DescribeTaskQueue and workflow-count call in the run answered. Read this before believing any zero on the Queue depth row — a depth of 0 with the poller up means no work waiting, whereas a depth of 0 with the poller down means the last written file is simply stale.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 57 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "FAILING", "color": "red", "index": 0 }, "1": { "text": "OK", "color": "green", "index": 1 } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "temporal_poller_up",
+          "legendFormat": "poller",
+          "editorMode": "code",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "type": "stat",
+      "title": "Queue metrics staleness",
+      "description": "time() - temporal_poller_last_success_timestamp_seconds: seconds since the poller last completed a fully successful run. The poller carries this timestamp forward across a failed run so the gap is measurable from the metric alone. Yellow past 120 s, red past 300 s — and 300 s is also roughly when matching unloads an idle partition, so past red the native gauge has decayed and the poller is no longer holding partitions resident either.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 57 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 120 },
+              { "color": "red", "value": 300 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "area", "textMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "time() - temporal_poller_last_success_timestamp_seconds",
+          "legendFormat": "age",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 43,
+      "type": "stat",
+      "title": "Container OOM kills",
+      "description": "incus_memory_OOM_kills_total{name=\"bench-temporal\"} — cumulative processes killed by the cgroup memory limit. Any increase means the 1536 MiB cap was actually hit, which for this guest is the failure mode the resident-set panel above is watching for.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 57 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "area", "textMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "incus_memory_OOM_kills_total{name=\"bench-temporal\"}",
+          "legendFormat": "{{name}}",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 44,
+      "type": "timeseries",
+      "title": "Errors and shard health",
+      "description": "Left axis, per-second error rates: service_errors is gRPC failures across all roles, and persistence_error_with_type is broken out by error_type because the two that dominate here — serviceerror_NotFound on GetTaskQueue and GetTaskQueueUserData — are matching looking up a task queue that has never been written and are not faults. Right axis, shard health: numshards_gauge is the configured 64 history shards and should be flat, while rate(acquire_shards_count[5m]) is the shard controller re-acquiring ownership. A step in acquisitions with a flat shard count is the history service restarting.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 63 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 5, "showPoints": "never" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "shards configured" },
+            "properties": [
+              { "id": "unit", "value": "short" },
+              { "id": "custom.axisPlacement", "value": "right" },
+              { "id": "custom.fillOpacity", "value": 0 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "gRPC errors" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum(rate(service_errors[5m]))",
+          "legendFormat": "gRPC errors",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum by (error_type) (rate(persistence_error_with_type[5m]))",
+          "legendFormat": "{{error_type}}",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "rate(acquire_shards_count[5m])",
+          "legendFormat": "shard acquisitions",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "D",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "numshards_gauge",
+          "legendFormat": "shards configured",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 45,
+      "type": "timeseries",
+      "title": "Service units and connection pools",
+      "description": "node_systemd_unit_state on bench-temporal filtered to state=active, so 1 is running and 0 is not: temporal.service is the server, temporal-ui.service the web UI, and temporal-queue-metrics.timer the schedule that drives the whole Queue depth row. The timer is the unit to watch — temporal-queue-metrics.service is Type=oneshot and reads 0 between runs, which is normal. The count of units in state=failed across the guest is drawn alongside and should be flat at zero. On the right axis, persistence_sql_open_conn by db_kind is Temporal's open Postgres connections against the main and visibility databases; a pool pinned at its ceiling is what persistence latency climbing looks like from this side.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 63 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 20, "showPoints": "never" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": "conns .*" },
+            "properties": [
+              { "id": "custom.axisPlacement", "value": "right" },
+              { "id": "custom.fillOpacity", "value": 0 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "failed units" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum by (name) (node_systemd_unit_state{instance=\"bench-temporal:9100\", name=~\"temporal\\\\.service|temporal-ui\\\\.service|temporal-queue-metrics\\\\.timer\", state=\"active\"})",
+          "legendFormat": "{{name}}",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum(node_systemd_unit_state{instance=\"bench-temporal:9100\", state=\"failed\"})",
+          "legendFormat": "failed units",
+          "editorMode": "code",
+          "range": true
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
+          "expr": "sum by (db_kind) (persistence_sql_open_conn)",
+          "legendFormat": "conns {{db_kind}}",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    }
+  ]
+}
