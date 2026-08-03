@@ -7,8 +7,12 @@
 # `bench` database via absurdctl (see the phase-0 note). SDK and schema
 # versions move in lockstep — pin 0.4.0 on both sides.
 #
-# Secret (out-of-repo, root-only): /root/bench-secrets.env with
-# ABSURD_DATABASE_URL=postgresql://absurd:...@dogmatix:5432/bench
+# Secrets (out-of-repo, root-only): /root/bench-secrets.env carries
+# ABSURD_DATABASE_URL=postgresql://absurd:...@dogmatix:5432/bench for the SDK
+# and Habitat, plus the same credentials as libpq's own PGHOST/PGPORT/PGUSER/
+# PGPASSWORD/PGDATABASE for the psql timers. psql takes them from the
+# environment rather than a DSN argument because argv is world-readable and
+# the DynamicUser workers on this guest could read it.
 { pkgs, ... }:
 
 let
@@ -88,12 +92,17 @@ let
   };
 
   queueMetrics = pkgs.writeShellScript "absurd-queue-metrics" ''
-    set -eu
+    set -u
     OUT=/var/lib/node-exporter-textfile/absurd.prom
     TMP="$OUT.tmp"
+    trap 'rm -f "$TMP"' EXIT
+    ok=1
     : > "$TMP"
     for q in default gpu; do
-      ${pkgs.postgresql}/bin/psql "$ABSURD_DATABASE_URL" -Atc "
+      # Capture before writing: piping psql into the read loop would hide a
+      # failed query behind the pipeline's exit status and publish an empty
+      # file, which reads as "nothing waiting".
+      row=$(${pkgs.postgresql}/bin/psql -Atq -v ON_ERROR_STOP=1 -c "
         select
           coalesce(count(*) filter (where r.state in ('pending','sleeping')
             and r.available_at <= now()), 0),
@@ -103,12 +112,27 @@ let
         from absurd.r_$q r
         join absurd.t_$q t using (task_id)
         where t.state in ('pending','sleeping','running')
-      " | while IFS='|' read -r depth oldest; do
-        echo "absurd_queue_depth{queue=\"$q\"} $depth" >> "$TMP"
-        echo "absurd_queue_oldest_pending_seconds{queue=\"$q\"} $oldest" >> "$TMP"
-      done
+      ") || { ok=0; continue; }
+      IFS='|' read -r depth oldest <<< "$row"
+      echo "absurd_queue_depth{queue=\"$q\"} $depth" >> "$TMP"
+      echo "absurd_queue_oldest_pending_seconds{queue=\"$q\"} $oldest" >> "$TMP"
     done
+    {
+      echo '# HELP absurd_poller_up 1 when every queue answered on this run.'
+      echo '# TYPE absurd_poller_up gauge'
+      echo "absurd_poller_up $ok"
+      echo '# HELP absurd_poller_last_success_timestamp_seconds Unix time of the last fully successful poll.'
+      echo '# TYPE absurd_poller_last_success_timestamp_seconds gauge'
+    } >> "$TMP"
+    # Carried forward on a failed run so the gap is measurable from the metric.
+    if [ "$ok" = 1 ]; then
+      echo "absurd_poller_last_success_timestamp_seconds $(date +%s)" >> "$TMP"
+    else
+      grep '^absurd_poller_last_success_timestamp_seconds ' "$OUT" 2>/dev/null >> "$TMP" \
+        || echo 'absurd_poller_last_success_timestamp_seconds 0' >> "$TMP"
+    fi
     mv "$TMP" "$OUT"
+    trap - EXIT
   '';
 in
 {
@@ -142,6 +166,7 @@ in
     serviceConfig = {
       Type = "oneshot";
       EnvironmentFile = "/root/bench-secrets.env";
+      TimeoutStartSec = "20s";
     };
     script = "exec ${queueMetrics}";
   };
@@ -157,7 +182,7 @@ in
       EnvironmentFile = "/root/bench-secrets.env";
     };
     script = ''
-      ${pkgs.postgresql}/bin/psql "$ABSURD_DATABASE_URL" \
+      ${pkgs.postgresql}/bin/psql \
         -c "select * from absurd.cleanup_all_queues()"
     '';
   };

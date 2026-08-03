@@ -162,6 +162,32 @@ in
     '';
   };
 
+  # Task-queue backlog into the node-exporter textfile collector. The script's
+  # own header explains why the native gauge cannot serve this purpose. The
+  # HTTP API it calls is the frontend's, on loopback, so this adds no exposure.
+  systemd.services.temporal-queue-metrics = {
+    after = [ "temporal.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      # Six HTTP calls per run; the ceiling keeps a stuck run from overlapping
+      # the next timer tick and leaving the gauges silently stale.
+      TimeoutStartSec = "25s";
+    };
+    environment = {
+      CURL = "${pkgs.curl}/bin/curl";
+      JQ = "${pkgs.jq}/bin/jq";
+      TEMPORAL_QUEUES = "bench-default bench-gpu";
+    };
+    script = "exec ${pkgs.bash}/bin/bash ${./temporal-queue-metrics.sh}";
+  };
+  systemd.timers.temporal-queue-metrics = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "1min";
+      OnUnitActiveSec = "30s";
+    };
+  };
+
   systemd.services.temporal-ui = {
     wantedBy = [ "multi-user.target" ];
     after = [ "temporal.service" ];
