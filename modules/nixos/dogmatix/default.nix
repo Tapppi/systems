@@ -14,5 +14,6 @@
     ./ssh.nix
     ./users.nix
     ./incus.nix
+    ./observability.nix
   ];
 }
