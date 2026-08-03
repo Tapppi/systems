@@ -36,7 +36,11 @@ let
     from absurd_sdk import Absurd
 
     queue = sys.argv[1] if len(sys.argv) > 1 else "default"
-    app = Absurd(os.environ["ABSURD_DATABASE_URL"])
+    # queue_name on the client is what the worker polls. register_task(queue=)
+    # only tags where spawn() puts a task — it does not affect claiming, so a
+    # worker built without queue_name silently polls "default" no matter what
+    # its tasks are registered against.
+    app = Absurd(os.environ["ABSURD_DATABASE_URL"], queue_name=queue)
 
     @app.register_task(name="bench-noop", queue=queue)
     def bench_noop(params, ctx):
