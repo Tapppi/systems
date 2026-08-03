@@ -4,8 +4,11 @@
 #
 # Secrets (all out-of-repo, root-only on the guest):
 #   /root/bench-secrets.env  — DATA_SOURCE_NAME for postgres_exporter
-#   /root/incus-metrics.{crt,key} — client cert trusted by the host's
-#     Incus metrics endpoint (10.135.155.1:8444, --type=metrics)
+#   /var/lib/prometheus-incus/incus-metrics.{crt,key} — client cert trusted
+#     by the host's Incus metrics endpoint (10.135.155.1:8444,
+#     --type=metrics). Deliberately outside /root: prometheus runs as its
+#     own user and must traverse the containing directory, which /root's
+#     0700 forbids even with a bind mount of the files themselves.
 { ... }:
 
 {
@@ -48,8 +51,8 @@
         job_name = "incus";
         scheme = "https";
         tls_config = {
-          cert_file = "/root/incus-metrics.crt";
-          key_file = "/root/incus-metrics.key";
+          cert_file = "/var/lib/prometheus-incus/incus-metrics.crt";
+          key_file = "/var/lib/prometheus-incus/incus-metrics.key";
           insecure_skip_verify = true; # host cert is Incus-generated
         };
         static_configs = [{ targets = [ "10.135.155.1:8444" ]; }];
@@ -57,10 +60,9 @@
       }
     ];
   };
-  # Prometheus runs sandboxed; grant it the cert paths.
+  # Prometheus runs sandboxed (ProtectSystem=strict); grant it the cert dir.
   systemd.services.prometheus.serviceConfig.BindReadOnlyPaths = [
-    "/root/incus-metrics.crt"
-    "/root/incus-metrics.key"
+    "/var/lib/prometheus-incus"
   ];
 
   services.prometheus.exporters.postgres = {
