@@ -121,9 +121,19 @@ in
       RemainAfterExit = true;
       EnvironmentFile = "/root/bench-secrets.env";
     };
+    # network-online.target inside an LXC guest fires before the host bridge
+    # can actually carry traffic, so without this wait the unit fails on an
+    # unreachable bench-pg after a host reboot and takes temporal.service
+    # (which Requires= it) down with it for good. Type=oneshot cannot use
+    # Restart=, so the retry has to live in the script.
     script = ''
       export SQL_PLUGIN=postgres12 SQL_HOST=${pg} SQL_PORT=5432 SQL_USER=temporal
       export SQL_PASSWORD="$SQL_PASSWORD"
+      for i in $(seq 1 60); do
+        if ${pkgs.netcat}/bin/nc -z ${pg} 5432; then break; fi
+        echo "waiting for postgres at ${pg}:5432 ($i/60)"
+        sleep 2
+      done
       temporal-sql-tool --database temporal setup-schema -v 0.0 || true
       temporal-sql-tool --database temporal update-schema \
         -d ${schemaRoot}/temporal/versioned
