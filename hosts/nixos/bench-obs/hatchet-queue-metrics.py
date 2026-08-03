@@ -13,6 +13,11 @@ Endpoints (tenant-scoped, worker JWT as bearer):
       -> [{"status": "QUEUED", "count": n}, ...]  tenant-global
          `since` is required; without it every count is 0 and the call
          still returns 200.
+  GET /api/v1/tenants/{tenant}/workflows/scheduled
+      -> {"rows": [{"metadata": {"id": ...}, "triggerAt": <ISO8601>,
+                    "workflowName": ...}, ...]}
+         A run scheduled for the future is in no Hatchet metric and no
+         queue: until it fires it exists only here.
 """
 
 import json
@@ -58,14 +63,19 @@ def short_queue(key):
     return head if sep and head == tail else key
 
 
-def previous_last_success():
-    """Carry the last-success timestamp across a failed poll so the gap is
-    measurable from the metric itself."""
+def previous(name):
+    """Read a value back out of the file this poller wrote last time.
+
+    The textfile collector offers no other persistence, and two of the
+    liveness metrics need it: the last-success timestamp is carried across a
+    failed poll so the gap is measurable, and the failure counter has to
+    accumulate rather than be rewritten — a gauge that fails and recovers
+    inside one scrape interval leaves no trace at all."""
     try:
         with open(OUT, encoding="utf-8") as fh:
             for line in fh:
-                name, _, value = line.partition(" ")
-                if name == "hatchet_poller_last_success_timestamp_seconds":
+                key, _, value = line.partition(" ")
+                if key == name:
                     return float(value)
     except (OSError, ValueError):
         pass
@@ -129,6 +139,38 @@ def collect_task_status():
     return lines
 
 
+def collect_scheduled_runs():
+    """Runs scheduled for a future trigger time. Nothing else observes them:
+    they hold no queue slot, move no counter, and appear on no dashboard, so
+    a scheduled run silently disappearing looks exactly like nothing
+    happening. The bench parks a five-day run this way."""
+    rows = get(f"/api/v1/tenants/{TENANT}/workflows/scheduled?limit=200").get("rows") or []
+    lines = [
+        "# HELP hatchet_scheduled_runs_total Runs scheduled for a future trigger.",
+        "# TYPE hatchet_scheduled_runs_total gauge",
+        f"hatchet_scheduled_runs_total {len(rows)}",
+        "# HELP hatchet_scheduled_run_next_trigger_timestamp_seconds Unix time the "
+        "soonest scheduled run of a workflow fires.",
+        "# TYPE hatchet_scheduled_run_next_trigger_timestamp_seconds gauge",
+    ]
+    # Grouped by workflow rather than emitted per run: a run id is unbounded
+    # over time, and every one ever scheduled would mint a permanent series.
+    soonest = {}
+    for row in rows:
+        trigger = row.get("triggerAt")
+        if not trigger:
+            continue
+        epoch = datetime.fromisoformat(trigger.replace("Z", "+00:00")).timestamp()
+        name = row.get("workflowName") or ""
+        soonest[name] = min(soonest.get(name, epoch), epoch)
+    for name in sorted(soonest):
+        lines.append(
+            f'hatchet_scheduled_run_next_trigger_timestamp_seconds'
+            f'{{workflow_name="{esc(name)}"}} {soonest[name]:.0f}'
+        )
+    return lines
+
+
 def write(lines):
     tmp = OUT + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
@@ -146,18 +188,24 @@ def main():
         # blank the depth gauges. Any exception at all means up 0 — a handler
         # that lets an unexpected type escape would leave the previous file,
         # and its up 1, in place indefinitely.
-        for section in (collect_queue_depth, collect_task_status):
+        for section in (collect_queue_depth, collect_task_status, collect_scheduled_runs):
             try:
                 lines.extend(section())
             except Exception as exc:  # noqa: BLE001 — see above
                 errors.append(f"{section.__name__}: {exc}")
 
     up = 0 if errors else 1
-    last_success = time.time() if up else previous_last_success()
+    last_success = (
+        time.time() if up else previous("hatchet_poller_last_success_timestamp_seconds")
+    )
+    failures = int(previous("hatchet_poller_failures_total")) + (0 if up else 1)
 
     lines.append("# HELP hatchet_poller_up 1 when the last REST poll succeeded.")
     lines.append("# TYPE hatchet_poller_up gauge")
     lines.append(f"hatchet_poller_up {up}")
+    lines.append("# HELP hatchet_poller_failures_total Polls that failed a section.")
+    lines.append("# TYPE hatchet_poller_failures_total counter")
+    lines.append(f"hatchet_poller_failures_total {failures}")
     lines.append(
         "# HELP hatchet_poller_last_success_timestamp_seconds Unix time of the "
         "last successful poll."

@@ -93,46 +93,83 @@ let
 
   queueMetrics = pkgs.writeShellScript "absurd-queue-metrics" ''
     set -u
+    . ${../../../modules/nixos/bench/poller-footer.sh}
+    PSQL="${pkgs.postgresql}/bin/psql -Atq -v ON_ERROR_STOP=1"
+    PREFIX=absurd
     OUT=/var/lib/node-exporter-textfile/absurd.prom
     TMP="$OUT.tmp"
     trap 'rm -f "$TMP"' EXIT
     ok=1
-    : > "$TMP"
-    for q in default gpu; do
-      # Capture before writing: piping psql into the read loop would hide a
-      # failed query behind the pipeline's exit status and publish an empty
-      # file, which reads as "nothing waiting".
-      row=$(${pkgs.postgresql}/bin/psql -Atq -v ON_ERROR_STOP=1 -c "
-        select
-          coalesce(count(*) filter (where r.state in ('pending','sleeping')
-            and r.available_at <= now()), 0),
-          coalesce(extract(epoch from now() - min(r.available_at)
-            filter (where r.state in ('pending','sleeping')
-              and r.available_at <= now())), 0)
-        from absurd.r_$q r
-        join absurd.t_$q t using (task_id)
-        where t.state in ('pending','sleeping','running')
-      ") || { ok=0; continue; }
-      IFS='|' read -r depth oldest <<< "$row"
-      echo "absurd_queue_depth{queue=\"$q\"} $depth" >> "$TMP"
-      echo "absurd_queue_oldest_pending_seconds{queue=\"$q\"} $oldest" >> "$TMP"
-    done
     {
-      echo '# HELP absurd_poller_up 1 when every queue answered on this run.'
-      echo '# TYPE absurd_poller_up gauge'
-      echo "absurd_poller_up $ok"
-      echo '# HELP absurd_poller_last_success_timestamp_seconds Unix time of the last fully successful poll.'
-      echo '# TYPE absurd_poller_last_success_timestamp_seconds gauge'
-    } >> "$TMP"
-    # Carried forward on a failed run so the gap is measurable from the metric.
-    if [ "$ok" = 1 ]; then
-      echo "absurd_poller_last_success_timestamp_seconds $(date +%s)" >> "$TMP"
-    else
-      grep '^absurd_poller_last_success_timestamp_seconds ' "$OUT" 2>/dev/null >> "$TMP" \
-        || echo 'absurd_poller_last_success_timestamp_seconds 0' >> "$TMP"
+      echo '# HELP absurd_queue_depth Runs claimable now, per queue.'
+      echo '# TYPE absurd_queue_depth gauge'
+      echo '# HELP absurd_queue_oldest_pending_seconds Age of the oldest claimable run.'
+      echo '# TYPE absurd_queue_oldest_pending_seconds gauge'
+      echo '# HELP absurd_run_oldest_running_seconds Age of the longest-running run.'
+      echo '# TYPE absurd_run_oldest_running_seconds gauge'
+      echo '# HELP absurd_run_expired_leases Running runs past their claim expiry.'
+      echo '# TYPE absurd_run_expired_leases gauge'
+      echo '# HELP absurd_tasks Tasks per queue and state.'
+      echo '# TYPE absurd_tasks gauge'
+    } > "$TMP"
+
+    # Queues come from absurd.queues rather than a hand-kept list. A queue
+    # that exists but is not enumerated has no depth series, and an absent
+    # series is indistinguishable from an idle one — the same class of hole
+    # as a worker polling a queue nobody watches.
+    queues=$($PSQL -c "select queue_name from absurd.queues order by 1") || ok=0
+
+    # All queues in one statement rather than one round trip each: psql spawn
+    # plus TCP connect plus SCRAM costs an order of magnitude more than the
+    # queries do, and this runs every 30 s against the shared database. The
+    # SQL formats the exposition lines itself, which is why there is no
+    # parsing here at all — the alternative was a key-tagged union and a case
+    # dispatch whose positional fields meant different things per branch.
+    #
+    # `depth` is the wake-on-LAN signal: event-waiting runs with a future
+    # available_at are deliberately excluded, so a legitimately parked task
+    # reads as 0. Task states are zero-filled from a fixed list, so `failed`
+    # is a series that exists and reads 0 rather than one that springs into
+    # existence on the first failure.
+    ctes= ; body=
+    for q in $queues; do
+      ctes="''${ctes:+$ctes,}
+        pend_$q as (
+          select r.available_at
+          from absurd.r_$q r join absurd.t_$q t using (task_id)
+          where t.state in ('pending','sleeping','running')
+            and r.state in ('pending','sleeping')
+            and r.available_at <= now()),
+        runs_$q as (
+          select r.started_at, r.claim_expires_at
+          from absurd.r_$q r where r.state = 'running')"
+      body="''${body:+$body union all}
+        select format('absurd_queue_depth{queue=\"%s\"} %s', '$q',
+          (select count(*) from pend_$q))
+        union all select format('absurd_queue_oldest_pending_seconds{queue=\"%s\"} %s', '$q',
+          (select coalesce(extract(epoch from now() - min(available_at)), 0)::numeric(20,3)
+             from pend_$q))
+        union all select format('absurd_run_oldest_running_seconds{queue=\"%s\"} %s', '$q',
+          (select coalesce(extract(epoch from now() - min(started_at)), 0)::numeric(20,3)
+             from runs_$q))
+        union all select format('absurd_run_expired_leases{queue=\"%s\"} %s', '$q',
+          (select count(*) from runs_$q where claim_expires_at < now()))
+        union all select format('absurd_tasks{queue=\"%s\",state=\"%s\"} %s', '$q',
+          s.state, coalesce(c.n, 0))
+          from (values ('pending'),('sleeping'),('running'),
+                       ('completed'),('failed'),('cancelled')) as s(state)
+          left join (select state, count(*) n from absurd.t_$q group by state) c
+            on c.state = s.state"
+    done
+
+    # Captured before writing: piping psql straight into the file would hide a
+    # failed query behind the pipeline's exit status and publish a truncated
+    # file, which reads as "nothing waiting".
+    if [ -n "$body" ]; then
+      rows=$($PSQL -c "with $ctes $body") && printf '%s\n' "$rows" >> "$TMP" || ok=0
     fi
-    mv "$TMP" "$OUT"
-    trap - EXIT
+
+    poller_footer
   '';
 in
 {
@@ -151,12 +188,19 @@ in
   systemd.services.habitat = {
     wantedBy = [ "multi-user.target" ];
     after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
     serviceConfig = {
       EnvironmentFile = "/root/bench-secrets.env";
       ExecStart = "${habitat}/bin/habitat run -listen :7890";
       DynamicUser = true;
       Restart = "on-failure";
+      RestartSec = 10;
     };
+    # Habitat exits when it cannot reach the database, and the default
+    # start-limit gives up permanently after five fast failures — so a
+    # transient unreachable bridge during boot leaves the UI dead until
+    # someone notices. Retry forever instead. StartLimit* live in [Unit].
+    unitConfig.StartLimitIntervalSec = 0;
   };
 
   # Queue depth + oldest-pending into the textfile collector — this is the

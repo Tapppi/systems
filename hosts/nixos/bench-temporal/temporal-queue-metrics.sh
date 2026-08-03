@@ -19,12 +19,15 @@
 # first call after a reload reports 0s and the next is accurate, so the age is
 # only meaningful while the timer has been running. Alert on the count.
 #
-# CURL/JQ are injected by the nix wrapper; defaults let the script run
-# standalone for testing.
+# CURL/JQ/POLLER_FOOTER are injected by the nix wrapper; defaults let the
+# script run standalone for testing.
 set -u
 
 CURL=${CURL:-curl}
 JQ=${JQ:-jq}
+# Publishes the poller liveness triplet and the file itself; see its header.
+. "${POLLER_FOOTER:-../../modules/nixos/bench/poller-footer.sh}"
+PREFIX=temporal
 API=${TEMPORAL_HTTP_API:-http://127.0.0.1:7243}
 NS=${TEMPORAL_NAMESPACE:-default}
 QUEUES=${TEMPORAL_QUEUES:-bench-default bench-gpu}
@@ -94,23 +97,4 @@ for q in $QUEUES; do
   fi
 done
 
-{
-  echo '# HELP temporal_poller_up 1 when every source answered on this run.'
-  echo '# TYPE temporal_poller_up gauge'
-  echo "temporal_poller_up $ok"
-} >> "$TMP"
-
-{
-  echo '# HELP temporal_poller_last_success_timestamp_seconds Unix time of the last fully successful poll.'
-  echo '# TYPE temporal_poller_last_success_timestamp_seconds gauge'
-} >> "$TMP"
-# Carried forward on a failed run so the gap is measurable from the metric.
-if [ "$ok" = 1 ]; then
-  echo "temporal_poller_last_success_timestamp_seconds $(date +%s)" >> "$TMP"
-else
-  grep '^temporal_poller_last_success_timestamp_seconds ' "$OUT" 2>/dev/null >> "$TMP" \
-    || echo 'temporal_poller_last_success_timestamp_seconds 0' >> "$TMP"
-fi
-
-mv "$TMP" "$OUT"
-trap - EXIT
+poller_footer

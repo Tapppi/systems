@@ -20,6 +20,9 @@
 set -u
 
 PSQL=${PSQL:-psql}
+# Publishes the poller liveness triplet and the file itself; see its header.
+. "${POLLER_FOOTER:-../../../modules/nixos/bench/poller-footer.sh}"
+PREFIX=pg_table
 : "${PGHOST:?PGHOST must be set}"
 : "${PGUSER:?PGUSER must be set}"
 : "${PGPASSWORD:?PGPASSWORD must be set}"
@@ -43,45 +46,72 @@ ok=1
   echo '# TYPE pg_table_heap_bytes gauge'
   echo '# HELP pg_table_index_bytes Total size of all indexes on the table.'
   echo '# TYPE pg_table_index_bytes gauge'
+  echo '# HELP pg_table_dead_tuples Dead tuples awaiting vacuum.'
+  echo '# TYPE pg_table_dead_tuples gauge'
+  echo '# HELP pg_table_live_tuples Live tuple estimate.'
+  echo '# TYPE pg_table_live_tuples gauge'
+  echo '# HELP pg_table_last_autovacuum_timestamp_seconds Unix time of the last autovacuum, 0 if never.'
+  echo '# TYPE pg_table_last_autovacuum_timestamp_seconds gauge'
 } > "$TMP"
 
+# Dead tuples ride along with the sizes for the same reason the sizes are here
+# at all: the exporter's stat_user_tables collector reports only the database
+# its DSN names, which is `postgres` and has no user tables. Autovacuum falling
+# behind on a Temporal history table or an Absurd runs table is otherwise
+# invisible until it shows up as size growth, by which point it is the finding
+# rather than the warning.
 for db in $DATABASES; do
   rows=$("$PSQL" -d "$db" -Atq -F'|' -v ON_ERROR_STOP=1 -c "
-    select schemaname, relname,
-           pg_total_relation_size(relid),
-           pg_relation_size(relid),
-           pg_indexes_size(relid)
-    from pg_catalog.pg_statio_user_tables
-    order by pg_total_relation_size(relid) desc
+    select s.schemaname, s.relname,
+           pg_total_relation_size(s.relid),
+           pg_relation_size(s.relid),
+           pg_indexes_size(s.relid),
+           coalesce(u.n_dead_tup, 0),
+           coalesce(u.n_live_tup, 0),
+           coalesce(extract(epoch from greatest(u.last_autovacuum, u.last_vacuum)), 0)::bigint
+    from pg_catalog.pg_statio_user_tables s
+    left join pg_catalog.pg_stat_user_tables u on u.relid = s.relid
+    order by pg_total_relation_size(s.relid) desc
     limit $TOP_N
   ") || { ok=0; continue; }
 
-  while IFS='|' read -r schema table total heap idx; do
+  while IFS='|' read -r schema table total heap idx dead live vac; do
     [ -n "$table" ] || continue
     lbl="datname=\"$db\",schema=\"$schema\",table=\"$table\""
     echo "pg_table_total_bytes{$lbl} $total"
     echo "pg_table_heap_bytes{$lbl} $heap"
     echo "pg_table_index_bytes{$lbl} $idx"
+    echo "pg_table_dead_tuples{$lbl} $dead"
+    echo "pg_table_live_tuples{$lbl} $live"
+    echo "pg_table_last_autovacuum_timestamp_seconds{$lbl} $vac"
   done <<< "$rows" >> "$TMP"
 done
 
-{
-  echo '# HELP pg_table_poller_up 1 when every database answered on this run.'
-  echo '# TYPE pg_table_poller_up gauge'
-  echo "pg_table_poller_up $ok"
-  echo '# HELP pg_table_poller_last_success_timestamp_seconds Unix time of the last fully successful poll.'
-  echo '# TYPE pg_table_poller_last_success_timestamp_seconds gauge'
-} >> "$TMP"
-
-# Carried forward on a failed run so the gap is measurable from the metric.
-if [ "$ok" = 1 ]; then
-  echo "pg_table_poller_last_success_timestamp_seconds $(date +%s)" >> "$TMP"
-elif [ -f "$OUT" ]; then
-  grep '^pg_table_poller_last_success_timestamp_seconds ' "$OUT" >> "$TMP" \
-    || echo "pg_table_poller_last_success_timestamp_seconds 0" >> "$TMP"
-else
-  echo "pg_table_poller_last_success_timestamp_seconds 0" >> "$TMP"
+# Cluster-wide WAL volume. postgres_exporter's `wal` collector reads
+# pg_ls_waldir, which describes the directory as it stands and sawtooths as
+# segments recycle — a rate over it is not bytes written. pg_stat_wal.wal_bytes
+# is a genuine cumulative counter, and it is the cleanest cross-engine measure
+# of write amplification the bench can get. One row, one connection, any
+# database.
+wal=$("$PSQL" -d postgres -Atq -F'|' -v ON_ERROR_STOP=1 -c "
+  select wal_records, wal_fpi, wal_bytes, wal_buffers_full from pg_stat_wal
+") || ok=0
+if [ -n "${wal:-}" ]; then
+  IFS='|' read -r wrecords wfpi wbytes wbuffull <<< "$wal"
+  {
+    echo '# HELP pg_stat_wal_records_total WAL records generated since stats reset.'
+    echo '# TYPE pg_stat_wal_records_total counter'
+    echo "pg_stat_wal_records_total $wrecords"
+    echo '# HELP pg_stat_wal_fpi_total WAL full-page images written.'
+    echo '# TYPE pg_stat_wal_fpi_total counter'
+    echo "pg_stat_wal_fpi_total $wfpi"
+    echo '# HELP pg_stat_wal_bytes_total WAL bytes actually written.'
+    echo '# TYPE pg_stat_wal_bytes_total counter'
+    echo "pg_stat_wal_bytes_total $wbytes"
+    echo '# HELP pg_stat_wal_buffers_full_total Times a WAL buffer flush was forced.'
+    echo '# TYPE pg_stat_wal_buffers_full_total counter'
+    echo "pg_stat_wal_buffers_full_total $wbuffull"
+  } >> "$TMP"
 fi
 
-mv "$TMP" "$OUT"
-trap - EXIT
+poller_footer

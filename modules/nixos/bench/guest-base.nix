@@ -51,7 +51,13 @@ in
   services.prometheus.exporters.node = {
     enable = true;
     enabledCollectors = [ "systemd" "textfile" ];
-    extraFlags = [ "--collector.textfile.directory=/var/lib/node-exporter-textfile" ];
+    extraFlags = [
+      "--collector.textfile.directory=/var/lib/node-exporter-textfile"
+      # A service that crashes and is restarted is `active` again well before
+      # the next 15 s scrape, so unit state alone cannot distinguish running
+      # from running *again*. This counter is the only signal that does.
+      "--collector.systemd.enable-restarts-metrics"
+    ];
   };
   systemd.tmpfiles.rules = [ "d /var/lib/node-exporter-textfile 0755 root root -" ];
 

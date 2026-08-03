@@ -12,8 +12,28 @@
 #     --type=metrics). Deliberately outside /root: prometheus runs as its
 #     own user and must traverse the containing directory, which /root's
 #     0700 forbids even with a bind mount of the files themselves.
-{ pkgs, ... }:
+{ pkgs, lib, ... }:
 
+let
+  # Bound here so the alert rules can be generated from the same list the
+  # scrape config is built from, rather than restating it. `node` carries
+  # several instances, so it is the one job the rules count instead of
+  # testing for absence.
+  nodeTargets = {
+    host = [ "dogmatix:9100" ];
+    guest = [ "bench-obs:9100" "bench-absurd:9100" "bench-temporal:9100" ];
+  };
+  otherJobs = [ "temporal" "hatchet" "postgres" "prometheus" "grafana" "incus" ];
+
+  alertRules = import ./alert-rules.nix {
+    inherit lib;
+    jobs = [ "node" ] ++ otherJobs;
+    nodeTargetCount = lib.length (nodeTargets.host ++ nodeTargets.guest);
+    # The same directory Grafana provisions from, so the rule is a genuine
+    # repo-versus-runtime check rather than a number someone typed once.
+    dashboardCount = lib.length (lib.attrNames (builtins.readDir ./dashboards));
+  };
+in
 {
   imports = [ ../../../modules/nixos/bench/guest-base.nix ];
 
@@ -21,6 +41,13 @@
 
   services.prometheus = {
     enable = true;
+
+    # No Alertmanager, deliberately: the rules exist for the `ALERTS` series
+    # the rule manager generates on its own, which the Health row of
+    # /d/bench-overview renders as a table. See alert-rules.nix.
+    rules = [
+      (builtins.toJSON { groups = lib.attrValues alertRules; })
+    ];
     # Full check stats the incus client cert inside the build sandbox where
     # it cannot exist.
     checkConfig = "syntax-only";
@@ -35,15 +62,11 @@
         # carries the instance label the panels select on.
         static_configs = [
           {
-            targets = [ "dogmatix:9100" ];
+            targets = nodeTargets.host;
             labels.role = "host";
           }
           {
-            targets = [
-              "bench-obs:9100"
-              "bench-absurd:9100"
-              "bench-temporal:9100"
-            ];
+            targets = nodeTargets.guest;
             labels.role = "guest";
           }
         ];
@@ -59,6 +82,35 @@
       {
         job_name = "postgres";
         static_configs = [{ targets = [ "localhost:9187" ]; }];
+      }
+      {
+        # The monitoring stack was the only part of the bench with no
+        # liveness signal of its own. The self-scrape carries config-reload
+        # success, rule-evaluation failures and TSDB health: a config that
+        # passes the syntax-only check below and then fails at runtime — an
+        # unreadable cert file being the case that already happened here —
+        # otherwise leaves no trace but a journal line.
+        job_name = "prometheus";
+        static_configs = [{ targets = [ "localhost:9090" ]; }];
+      }
+      {
+        # Grafana serves /metrics unauthenticated, so liveness costs none of
+        # the service account the dashboard API would need.
+        # absent(grafana_build_info) is the only signal that Grafana is
+        # crashlooping: a restart cycle faster than the scrape interval never
+        # reads as a failed unit.
+        #
+        # Kept to the two families anything here reads. Grafana's full surface
+        # is ~3600 series — mostly k8s-style apiserver histograms — which is
+        # about a tenth of this Prometheus's whole ingest and ~16 MB of its
+        # RSS, spent on a box whose 1 GiB cap is itself a bench measurement.
+        job_name = "grafana";
+        static_configs = [{ targets = [ "localhost:3000" ]; }];
+        metric_relabel_configs = [{
+          source_labels = [ "__name__" ];
+          regex = "grafana_build_info|grafana_stat_totals_.*";
+          action = "keep";
+        }];
       }
       {
         # Per-guest cgroup RAM/CPU — the primary per-engine bench figures.
@@ -140,6 +192,7 @@
     };
     environment = {
       PSQL = "${pkgs.postgresql}/bin/psql";
+      POLLER_FOOTER = "${../../../modules/nixos/bench/poller-footer.sh}";
       PG_DATABASES = "temporal temporal_visibility hatchet bench";
     };
     script = "exec ${pkgs.bash}/bin/bash ${./pg-table-metrics.sh}";

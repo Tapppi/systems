@@ -96,7 +96,12 @@ in
     path = [ pkgs.gnused pkgs.coreutils ];
     serviceConfig = {
       EnvironmentFile = "/root/bench-secrets.env";
-      ExecStart = lib.mkForce "${pkgs.temporal}/bin/temporal-server --root / --config /var/lib/temporal/config/ -e temporal-server start";
+      # --allow-no-auth is deliberate and load-bearing. The bench runs no
+      # authorizer — it is tailnet-only and single-tenant — and the server
+      # logs a forward-compatibility warning at every start saying future
+      # versions will refuse to boot without the flag. Passing it turns a
+      # warning nobody reads into a decision the config states.
+      ExecStart = lib.mkForce "${pkgs.temporal}/bin/temporal-server --root / --config /var/lib/temporal/config/ -e temporal-server --allow-no-auth start";
     };
     preStart = ''
       mkdir -p /var/lib/temporal/config
@@ -176,6 +181,7 @@ in
     environment = {
       CURL = "${pkgs.curl}/bin/curl";
       JQ = "${pkgs.jq}/bin/jq";
+      POLLER_FOOTER = "${../../../modules/nixos/bench/poller-footer.sh}";
       TEMPORAL_QUEUES = "bench-default bench-gpu";
     };
     script = "exec ${pkgs.bash}/bin/bash ${./temporal-queue-metrics.sh}";
@@ -195,6 +201,13 @@ in
       ExecStart = "${pkgs.temporal-ui-server}/bin/temporal-ui-server --root ${uiRoot} --env production start";
       DynamicUser = true;
       Restart = "on-failure";
+      # The UI exits when the frontend is not up yet, and it is only ordered
+      # After= the server, not Requires=. At the default 100 ms RestartSec it
+      # burns systemd's five-starts-in-ten-seconds budget in under a second
+      # after a host reboot and then stays dead permanently — the same shape
+      # as the reboot-ordering failure that once took the server itself out.
+      RestartSec = 10;
     };
+    unitConfig.StartLimitIntervalSec = 0;
   };
 }
