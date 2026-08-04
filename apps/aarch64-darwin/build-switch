@@ -5,16 +5,37 @@ YELLOW='\033[1;33m'
 RED='\033[1;31m'
 NC='\033[0m'
 
-SYSTEM_TYPE="aarch64-darwin"
-FLAKE_SYSTEM="darwinConfigurations.${SYSTEM_TYPE}.system"
+# darwinConfigurations are keyed by hostname (e.g. asterix), not by architecture.
+#
+# The per-architecture entry (darwinConfigurations.aarch64-darwin) is the
+# upstream starter's untested placeholder: it pulls in home-manager, the dock
+# module, system.defaults, and nix-homebrew with mutableTaps = false and
+# autoMigrate = true — which would take over the Homebrew install that
+# tapppi/macos-setup still manages. Targeting the hostname-keyed entry here is
+# what keeps that from happening by accident.
+#
+# Set DARWIN_HOST to build for a machine other than the one you are sitting at.
+HOST="${DARWIN_HOST:-$(scutil --get LocalHostName)}"
+FLAKE_SYSTEM="darwinConfigurations.${HOST}.system"
 
 export NIXPKGS_ALLOW_UNFREE=1
 
-echo "${YELLOW}Starting build...${NC}"
-nix --extra-experimental-features 'nix-command flakes' build .#$FLAKE_SYSTEM $@
+# Cheap guard: only forces the attribute names, not any system closure.
+if ! nix --extra-experimental-features 'nix-command flakes' eval \
+  .#darwinConfigurations --apply "cfgs: builtins.hasAttr \"${HOST}\" cfgs" \
+  2>/dev/null | grep -q true; then
+  echo "${RED}No darwinConfigurations.${HOST} in this flake.${NC}"
+  echo "${YELLOW}Add a host entry to flake.nix, or set DARWIN_HOST to an existing one.${NC}"
+  exit 1
+fi
 
-echo "${YELLOW}Switching to new generation...${NC}"
-./result/sw/bin/darwin-rebuild switch --flake .#${SYSTEM_TYPE} $@
+echo "${YELLOW}Building ${FLAKE_SYSTEM}...${NC}"
+nix --extra-experimental-features 'nix-command flakes' build ".#${FLAKE_SYSTEM}" "$@"
+
+# Build unprivileged, activate as root: darwin-rebuild refuses to switch as a
+# normal user ("system activation must now be run as root").
+echo "${YELLOW}Switching to new generation (needs sudo)...${NC}"
+sudo ./result/sw/bin/darwin-rebuild switch --flake ".#${HOST}" "$@"
 
 echo "${YELLOW}Cleaning up...${NC}"
 unlink ./result

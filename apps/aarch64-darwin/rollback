@@ -5,20 +5,24 @@ YELLOW='\033[1;33m'
 RED='\033[1;31m'
 NC='\033[0m'
 
-FLAKE="macos"
+# Keyed by hostname, matching build-switch — see the comment there for why the
+# per-architecture darwinConfigurations entry must not be used.
+HOST="${DARWIN_HOST:-$(scutil --get LocalHostName)}"
 
 echo "${YELLOW}Available generations:${NC}"
 /run/current-system/sw/bin/darwin-rebuild --list-generations
 
 echo "${YELLOW}Enter the generation number for rollback:${NC}"
-read GEN_NUM
+read -r GEN_NUM
 
 if [ -z "$GEN_NUM" ]; then
   echo "${RED}No generation number entered. Aborting rollback.${NC}"
   exit 1
 fi
 
-echo "${YELLOW}Rolling back to generation $GEN_NUM...${NC}"
-/run/current-system/sw/bin/darwin-rebuild switch --flake .#$FLAKE --switch-generation $GEN_NUM
+# Activation needs root, same as build-switch.
+echo "${YELLOW}Rolling back to generation ${GEN_NUM} (needs sudo)...${NC}"
+sudo /run/current-system/sw/bin/darwin-rebuild switch \
+  --flake ".#${HOST}" --switch-generation "$GEN_NUM"
 
-echo "${GREEN}Rollback to generation $GEN_NUM complete!${NC}"
+echo "${GREEN}Rollback to generation ${GEN_NUM} complete!${NC}"
