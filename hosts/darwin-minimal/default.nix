@@ -1,9 +1,10 @@
 # Minimal nix-darwin configuration for asterix (M-series Mac, Determinate Nix).
 #
 # Scope: only what is needed to bring the nix-rosetta-builder Linux builder
-# online and provide nvim on PATH. No home-manager, no homebrew, no dock/system
-# defaults. The full-featured starter lives in ../darwin/default.nix and is a
-# reference for a later migration; this module deliberately does not import it.
+# online and provide nvim (plus its GUI, neovide) on PATH. No home-manager, no
+# homebrew, no dock/system defaults. The full-featured starter lives in
+# ../darwin/default.nix and is a reference for a later migration; this module
+# deliberately does not import it.
 #
 # The nix-rosetta-builder module (wired in flake.nix) enables by default and
 # advertises the kvm + x86_64-linux features required to build NixOS disk
@@ -11,13 +12,54 @@
 # hand-rendered /etc/nix/machines below registers with Determinate's daemon.
 { config, pkgs, lib, inputs, ... }:
 
-let user = "tapani"; in
+let
+  user = "tapani";
+
+  # nvim from the flake's nvim input (nixCats-built package).
+  nvim = inputs.nvim.packages.${pkgs.stdenv.hostPlatform.system}.default;
+
+  # Neovide resolves plain `nvim` from $PATH by default, which is wrong in two
+  # ways here. Launched from Finder/Dock/Spotlight it inherits launchd's PATH
+  # (/usr/bin:/bin:/usr/sbin:/sbin), where no nvim exists at all — and macos-setup's
+  # tasks/config.sh registers com.neovide.neovide as the duti editor for dozens
+  # of file types, so GUI launches are the common case rather than the exception.
+  # Launched from a shell it would pick up whatever nvim happens to be first on
+  # PATH. Pin --neovim-bin to the nixCats build so every launch context gets the
+  # configured editor.
+  #
+  # Upstream ships Neovide.app/Contents/MacOS as a relative symlink to
+  # ../../../bin, so the bundle's CFBundleExecutable and the CLI entry point are
+  # the same file. Copying the bundle preserves that symlink — now pointing at
+  # this derivation's own bin/ — so wrapping bin/neovide once covers both the
+  # shell invocation and the LaunchServices one.
+  neovide = pkgs.stdenv.mkDerivation {
+    pname = "neovide-wrapped";
+    inherit (pkgs.neovide) version;
+
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    dontUnpack = true;
+
+    installPhase = ''
+      runHook preInstall
+
+      mkdir -p "$out/bin"
+      cp -R ${pkgs.neovide}/Applications "$out/Applications"
+      chmod -R u+w "$out/Applications"
+
+      makeWrapper ${pkgs.neovide}/bin/neovide "$out/bin/neovide" \
+        --add-flags "--neovim-bin ${nvim}/bin/nvim"
+
+      runHook postInstall
+    '';
+
+    meta = pkgs.neovide.meta // {
+      description = "${pkgs.neovide.meta.description} (pinned to the nixCats nvim)";
+    };
+  };
+in
 
 {
-  # nvim from the flake's nvim input (nixCats-built package).
-  environment.systemPackages = [
-    inputs.nvim.packages.${pkgs.stdenv.hostPlatform.system}.default
-  ];
+  environment.systemPackages = [ nvim neovide ];
 
   # --- Four Determinate-Nix accommodations (mirrored from ../darwin/default.nix;
   # keep the machines renderer in sync if nix-darwin's own format changes) ---
