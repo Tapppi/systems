@@ -29,10 +29,11 @@
       url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    nixCats = {
-      url = "github:BirdeeHub/nixCats-nvim";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    # nixCats declares no inputs of its own — it takes pkgs from the caller — so
+    # it gets no `inputs.nixpkgs.follows`. Adding one is a no-op override and
+    # makes Nix warn on every evaluation. The nixpkgs pin that matters for the
+    # editor is the one `nvim` follows, just below.
+    nixCats.url = "github:BirdeeHub/nixCats-nvim";
     nvim = {
       url = "path:./flakes/nvim";
       inputs.nixpkgs.follows = "nixpkgs";
