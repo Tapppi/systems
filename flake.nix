@@ -68,7 +68,10 @@
           #!/usr/bin/env bash
           PATH=${nixpkgs.legacyPackages.${system}.git}/bin:$PATH
           echo "Running ${scriptName} for ${system}"
-          exec ${self}/apps/${system}/${scriptName}
+          # "$@" matters: without it every flag passed as `nix run .#x -- --flag`
+          # is silently dropped, so e.g. `nix run .#build-switch -- --dry-run`
+          # would activate the system for real.
+          exec ${self}/apps/${system}/${scriptName} "$@"
         '')}/bin/${scriptName}";
       };
       mkLinuxApps = system: {
@@ -79,13 +82,14 @@
         "check-keys" = mkApp "check-keys" system;
         "install" = mkApp "install" system;
       };
+      # Only apps that actually exist under apps/aarch64-darwin/. The starter
+      # also declared apply/copy-keys/create-keys/check-keys, but no such
+      # scripts are present for darwin, so those attributes could only ever
+      # fail at exec. `apply` in particular is the starter's token-substitution
+      # script — see apps/aarch64-darwin/apply for why it stays unwired.
       mkDarwinApps = system: {
-        "apply" = mkApp "apply" system;
         "build" = mkApp "build" system;
         "build-switch" = mkApp "build-switch" system;
-        "copy-keys" = mkApp "copy-keys" system;
-        "create-keys" = mkApp "create-keys" system;
-        "check-keys" = mkApp "check-keys" system;
         "rollback" = mkApp "rollback" system;
       };
     in
@@ -93,41 +97,17 @@
       devShells = forAllSystems devShell;
       apps = nixpkgs.lib.genAttrs linuxSystems mkLinuxApps // nixpkgs.lib.genAttrs darwinSystems mkDarwinApps;
 
-      darwinConfigurations = nixpkgs.lib.genAttrs darwinSystems (system: let
-        user = "tapani";
-      in
-        darwin.lib.darwinSystem {
-          inherit system;
-          # Spread the inputs as individual module args (upstream starter's
-          # convention) *and* expose the whole set as `inputs`, which the
-          # home-manager modules take as an argument.
-          specialArgs = inputs // { inherit inputs; };
-          modules = [
-            home-manager.darwinModules.home-manager
-            nix-homebrew.darwinModules.nix-homebrew
-            inputs.nix-rosetta-builder.darwinModules.default
-            {
-              nix-homebrew = {
-                inherit user;
-                enable = true;
-                taps = {
-                  "homebrew/homebrew-core" = homebrew-core;
-                  "homebrew/homebrew-cask" = homebrew-cask;
-                  "homebrew/homebrew-bundle" = homebrew-bundle;
-                };
-                mutableTaps = false;
-                autoMigrate = true;
-              };
-            }
-            ./hosts/darwin
-          ];
-        }
-      ) // {
-        # Minimal, self-contained config for this Mac (asterix): only nvim +
-        # nix-rosetta-builder + the Determinate accommodations. Deliberately
-        # does NOT reuse the genAttrs starter above (no home-manager, homebrew,
-        # or dock). Used to bring the rosetta Linux builder online. Keyed by
-        # hostname, mirroring nixosConfigurations.dogmatix below.
+      # Keyed by hostname only. The upstream starter's per-architecture entry
+      # (darwinConfigurations.aarch64-darwin, built from ./hosts/darwin) is
+      # deliberately NOT instantiated here: it has never been activated, and
+      # switching to it would hand the Homebrew install that tapppi/macos-setup
+      # manages over to nix-homebrew. ./hosts/darwin and modules/darwin/ remain
+      # on disk as the reference for the eventual full migration; re-add an
+      # entry here when one of them is actually ready to activate.
+      darwinConfigurations = {
+        # Minimal, self-contained config for this Mac (asterix): nvim, neovide
+        # and nix-rosetta-builder plus the Determinate accommodations. Mirrors
+        # nixosConfigurations.dogmatix below in being hostname-keyed.
         asterix = darwin.lib.darwinSystem {
           system = "aarch64-darwin";
           specialArgs = inputs // { inherit inputs; };

@@ -1,3 +1,15 @@
+# REFERENCE ONLY — not instantiated in flake.nix, so nothing builds this.
+#
+# The full-featured dustinlyons starter (home-manager, homebrew, dock, system
+# defaults), kept as the worked reference for the macos-setup migration. The
+# live config for this Mac is ../darwin-minimal, which deliberately does not
+# import this file.
+#
+# It is not exposed as a darwinConfigurations entry because activating it would
+# apply nix-homebrew with `autoMigrate = true` to the Homebrew install that
+# tapppi/macos-setup still manages. Wire it up only when a piece of it is
+# genuinely ready to activate — and note ADR-002 slates the per-architecture
+# starter tree for removal once `systems` becomes a module library.
 { config, pkgs, lib, ... }:
 
 let user = "tapani"; in
