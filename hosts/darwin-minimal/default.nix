@@ -15,6 +15,10 @@
 let
   user = "tapani";
 
+  # Must match the darwinConfigurations attribute name in flake.nix — the apps
+  # in apps/aarch64-darwin/ look the host up by the machine's own name.
+  hostname = "asterix";
+
   # nvim from the flake's nvim input (nixCats-built package).
   nvim = inputs.nvim.packages.${pkgs.stdenv.hostPlatform.system}.default;
 
@@ -130,6 +134,24 @@ in
   };
 
   # --- Base darwin requirements ---
+
+  # Pin the machine's names so every activation re-asserts them.
+  #
+  # This is load-bearing for the apps in apps/aarch64-darwin/: they resolve the
+  # darwinConfigurations attribute from the machine's own name, so if the name
+  # drifts, `nix run .#build-switch` stops finding its host. LocalHostName is
+  # the one that drifts — mDNSResponder renames it (asterix -> asterix-2) when
+  # another device on the LAN claims the same Bonjour name. Declaring the names
+  # here means the next switch puts them back.
+  #
+  # hostName is `scutil --set HostName`, the command-line/SSH name and the one
+  # the apps read; localHostName defaults to it but is stated explicitly since
+  # it is the value actually at risk of drifting.
+  networking = {
+    hostName = hostname;
+    localHostName = hostname;
+    computerName = hostname;
+  };
 
   system.checks.verifyNixPath = false;
   system.primaryUser = user;
