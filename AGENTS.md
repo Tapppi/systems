@@ -116,18 +116,56 @@ When making file changes, do NOT create backup files, we use git for that purpos
 
 ### Building Configurations
 
+`darwinConfigurations` are keyed by **hostname** (`asterix`), not by
+architecture. The apps in `apps/<system>/` resolve the hostname themselves via
+`scutil --get LocalHostName`, overridable with `DARWIN_HOST`.
+
 ```bash
 # Check the flake configuration
 nix flake check
 
-# macOS (darwin)
-nix run .#build --extra-experimental-features "nix-command flakes"
-nix run .#build-switch  # Build and activate
+# macOS (darwin) — asterix
+nix run .#build         # build only, activates nothing
+nix run .#build-switch  # build and activate (prompts for sudo)
+nix run .#rollback      # list generations, pick one, activate it
 
 # NixOS
 nix run .#build-switch
 nix run .#apply
 ```
+
+**`nix run .#build-switch` is the single user-facing entrypoint for activating
+macOS configuration.** Everything beneath it — `nix build` of
+`darwinConfigurations.<host>.system`, then `darwin-rebuild switch --flake
+.#<host>` as root — is implementation detail. When the user asks how to
+activate, or how to apply a change just made, give them that one command.
+
+Never hand-run `sudo darwin-rebuild switch` against, or `nix build`, the
+`darwinConfigurations.aarch64-darwin` attribute. That per-architecture entry is
+the upstream starter's untested placeholder: it enables home-manager, the dock
+module, `system.defaults`, and `nix-homebrew` with `mutableTaps = false` and
+`autoMigrate = true`, which would take over the Homebrew install that
+`tapppi/macos-setup` still manages. The apps target the hostname-keyed entry so
+this cannot happen by accident.
+
+This is recorded here so it need not be re-explained in conversation: state the
+correct command and move on, rather than reiterating why the alternatives are
+wrong every time.
+
+### System Configuration vs. Imperative Package Install
+
+`build-switch` activates a whole new system generation built from this repo.
+That is the reproducible, in-git path and is what should be used for anything
+meant to persist.
+
+`nix profile install` is the imperative alternative: it adds a single package
+to `~/.nix-profile` with no record in this flake, so it silently would not exist
+on a rebuilt machine. Reach for it — or preferably `nix shell nixpkgs#<pkg>`,
+which is ephemeral and leaves nothing behind — only for genuine throwaways.
+Anything else belongs in a module here.
+
+`~/.nix-profile` does not currently exist on asterix: nothing is installed
+imperatively, and it should stay that way.
 
 ### Development Shell
 

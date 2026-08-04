@@ -13,6 +13,47 @@ Currently configuring the macOS configuration based on
 [my old macos-setup repo](https://github.com/tapppi/macos-setup).
 The nixOS config is wholly untested and simply there as a placeholder.
 
+## Usage
+
+`darwinConfigurations` are keyed by **hostname**, and the apps in `apps/`
+resolve the right one automatically:
+
+```sh
+nix run .#build         # build only, activates nothing
+nix run .#build-switch  # build and activate (prompts for sudo)
+nix run .#rollback      # list generations, pick one, activate it
+```
+
+`build-switch` is *the* entrypoint. What it does underneath — `nix build`
+followed by `darwin-rebuild switch --flake .#<hostname>`, with activation as
+root — is an implementation detail. Set `DARWIN_HOST` to target a machine other
+than the one you are sitting at.
+
+Note this is system configuration, not package installation: it replaces
+`/run/current-system` with a whole new generation built from this repo. That is
+different from `nix profile install`, which imperatively adds a single package
+to `~/.nix-profile` and is not tracked here. Use the flake for anything that
+should be reproducible; `nix profile install` (or better, `nix shell nixpkgs#x`)
+only for throwaway one-offs.
+
+### asterix
+
+The Apple Silicon Mac, mid-migration from `macos-setup`. `hosts/darwin-minimal/`
+is deliberately small while that migration is in progress — it manages the
+nix-rosetta-builder Linux builder, neovim (built from `flakes/nvim`), neovide
+wrapped to launch that exact neovim, and the Determinate Nix accommodations.
+Everything else on that machine is still owned by `macos-setup`.
+
+Because Determinate Nix owns the daemon, `nix.enable = false` and most `nix.*`
+options are inert; `/etc/nix/machines`, GC and the custom nix.conf are
+reinstated explicitly in `hosts/darwin-minimal/default.nix`.
+
+> **Do not** switch to `darwinConfigurations.aarch64-darwin`, the
+> per-architecture entry. It is the upstream starter's untested placeholder and
+> enables `nix-homebrew` with `autoMigrate`, which would take over the Homebrew
+> install that `macos-setup` still manages. The apps above target the
+> hostname-keyed entry precisely so this cannot happen by accident.
+
 ## Layout
 
 ```
