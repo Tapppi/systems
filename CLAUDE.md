@@ -33,9 +33,12 @@ The repository structure is based on [dustinlyons/nixos-config](https://github.c
     `flakes/nvim`), neovide wrapped to launch that exact neovim, and the
     Determinate Nix accommodations. Everything else on that machine is still
     owned by `macos-setup` — check there before assuming something is managed here.
-  - `hosts/darwin/` is the full-featured upstream starter, kept as a reference
-    for the eventual migration. It has never been activated. See the warning in
-    "Building Configurations" below.
+  - `hosts/darwin/` and `modules/darwin/` are the full-featured upstream
+    starter, kept as the worked reference for the macos-setup migration. They
+    have never been activated and are deliberately not instantiated in
+    `flake.nix`, so no buildable configuration exists for them. Per ADR-002 the
+    per-architecture starter placeholders are to be dropped entirely once
+    `systems` becomes a module library.
 - **NixOS Configuration**: Placeholder/untested
   - Not being actively worked on, but shared functionality kept in sync as "best effort" to reduce eventual work
 - **Neovim Configuration**: Fully functional, more information in @flakes/nvim/AGENTS.md
@@ -148,17 +151,9 @@ macOS configuration.** Everything beneath it — `nix build` of
 .#<host>` as root — is implementation detail. When the user asks how to
 activate, or how to apply a change just made, give them that one command.
 
-Never hand-run `sudo darwin-rebuild switch` against, or `nix build`, the
-`darwinConfigurations.aarch64-darwin` attribute. That per-architecture entry is
-the upstream starter's untested placeholder: it enables home-manager, the dock
-module, `system.defaults`, and `nix-homebrew` with `mutableTaps = false` and
-`autoMigrate = true`, which would take over the Homebrew install that
-`tapppi/macos-setup` still manages. The apps target the hostname-keyed entry so
-this cannot happen by accident.
-
-This is recorded here so it need not be re-explained in conversation: state the
-correct command and move on, rather than reiterating why the alternatives are
-wrong every time.
+`darwinConfigurations` contains hostname-keyed entries only. The upstream
+starter's per-architecture placeholder is no longer instantiated — see
+"Project Status" for where that tree now lives.
 
 **Never activate without the user explicitly asking.** `nix run .#build-switch`,
 `darwin-rebuild switch`, and `nixos-rebuild` change live system state and are the

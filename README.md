@@ -48,11 +48,9 @@ Because Determinate Nix owns the daemon, `nix.enable = false` and most `nix.*`
 options are inert; `/etc/nix/machines`, GC and the custom nix.conf are
 reinstated explicitly in `hosts/darwin-minimal/default.nix`.
 
-> **Do not** switch to `darwinConfigurations.aarch64-darwin`, the
-> per-architecture entry. It is the upstream starter's untested placeholder and
-> enables `nix-homebrew` with `autoMigrate`, which would take over the Homebrew
-> install that `macos-setup` still manages. The apps above target the
-> hostname-keyed entry precisely so this cannot happen by accident.
+`hosts/darwin/` and `modules/darwin/` are the full-featured upstream starter,
+kept as the worked reference for the macos-setup migration. They are not
+instantiated in `flake.nix`, so there is no buildable configuration for them.
 
 ## Layout
 
