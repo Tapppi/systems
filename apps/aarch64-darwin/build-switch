@@ -1,43 +1,34 @@
 #!/bin/sh -e
 
-GREEN='\033[1;32m'
-YELLOW='\033[1;33m'
-RED='\033[1;31m'
-NC='\033[0m'
+# shellcheck source-path=SCRIPTDIR source=common.sh
+. "$(dirname "$0")/common.sh"
 
-# darwinConfigurations are keyed by hostname (e.g. asterix), not by architecture.
-#
-# The per-architecture entry (darwinConfigurations.aarch64-darwin) is the
-# upstream starter's untested placeholder: it pulls in home-manager, the dock
-# module, system.defaults, and nix-homebrew with mutableTaps = false and
-# autoMigrate = true — which would take over the Homebrew install that
-# tapppi/macos-setup still manages. Targeting the hostname-keyed entry here is
-# what keeps that from happening by accident.
-#
-# Set DARWIN_HOST to build for a machine other than the one you are sitting at.
-HOST="${DARWIN_HOST:-$(scutil --get LocalHostName)}"
+HOST=$(darwin_host)
+require_darwin_host "${HOST}"
+
 FLAKE_SYSTEM="darwinConfigurations.${HOST}.system"
 
 export NIXPKGS_ALLOW_UNFREE=1
 
-# Cheap guard: only forces the attribute names, not any system closure.
-if ! nix --extra-experimental-features 'nix-command flakes' eval \
-  .#darwinConfigurations --apply "cfgs: builtins.hasAttr \"${HOST}\" cfgs" \
-  2>/dev/null | grep -q true; then
-  echo "${RED}No darwinConfigurations.${HOST} in this flake.${NC}"
-  echo "${YELLOW}Add a host entry to flake.nix, or set DARWIN_HOST to an existing one.${NC}"
-  exit 1
-fi
+# Build to a temp out-link rather than ./result: it is still a GC root for the
+# duration of the switch, but it cannot collide with a checkout and there is no
+# ./result left behind to unlink (which broke whenever a flag changed where nix
+# put its output).
+OUT_DIR=$(mktemp -d)
+cleanup() { rm -rf "${OUT_DIR}"; }
+trap cleanup EXIT INT TERM
 
 echo "${YELLOW}Building ${FLAKE_SYSTEM}...${NC}"
-nix --extra-experimental-features 'nix-command flakes' build ".#${FLAKE_SYSTEM}" "$@"
+nix_flake build ".#${FLAKE_SYSTEM}" --out-link "${OUT_DIR}/result"
 
+# "$@" goes to darwin-rebuild, not to `nix build` above: the two do not share an
+# option grammar, and the flags worth passing here (--dry-run, --show-trace,
+# --switch-generation) are darwin-rebuild's. Activating from the freshly built
+# system rather than the running one is what lets nix-darwin upgrade itself.
+#
 # Build unprivileged, activate as root: darwin-rebuild refuses to switch as a
 # normal user ("system activation must now be run as root").
 echo "${YELLOW}Switching to new generation (needs sudo)...${NC}"
-sudo ./result/sw/bin/darwin-rebuild switch --flake ".#${HOST}" "$@"
-
-echo "${YELLOW}Cleaning up...${NC}"
-unlink ./result
+sudo "${OUT_DIR}/result/sw/bin/darwin-rebuild" switch --flake ".#${HOST}" "$@"
 
 echo "${GREEN}Switch to new generation complete!${NC}"

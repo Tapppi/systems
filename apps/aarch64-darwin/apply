@@ -1,4 +1,25 @@
 #!/usr/bin/env bash
+#
+# INERT — kept as reference only. Not wired into flake.nix's mkDarwinApps, and
+# deliberately left non-executable, so `nix run .#apply` does not exist.
+#
+# Do not re-enable it as-is. It is the dustinlyons starter's token-substitution
+# script and it is unsafe here on three counts:
+#
+#   1. Line ~148 runs `find . -type f -exec … sed -i` over the entire working
+#      directory with no .git exclusion, so it rewrites git objects, packfiles
+#      and the index of whatever repo it is run in.
+#   2. The Darwin branch uses `sed -i ''`, which only works on BSD sed. GNU sed
+#      (first on PATH on a configured machine) reads '' as a missing filename
+#      and errors on every file.
+#   3. Its Darwin substitutions are dead: %USER%, %EMAIL% and %NAME% no longer
+#      appear anywhere in this repo. Only the NixOS placeholders (%HOST%,
+#      %DISK%, %INTERFACE%) still exist, and only apps/x86_64-linux/apply
+#      touches those.
+#
+# The recorded direction (ADR-002, HLB-5) is to retire the starter tree and
+# generate per-host config properly rather than substitute placeholders, so
+# this script is expected to be deleted rather than fixed.
 
 VERSION=1.0
 

@@ -1,29 +1,19 @@
 #!/bin/sh -e
 
-GREEN='\033[1;32m'
-YELLOW='\033[1;33m'
-RED='\033[1;31m'
-NC='\033[0m'
+# shellcheck source-path=SCRIPTDIR source=common.sh
+. "$(dirname "$0")/common.sh"
 
-# Keyed by hostname, matching build-switch — see the comment there for why the
-# per-architecture darwinConfigurations entry must not be used.
-HOST="${DARWIN_HOST:-$(scutil --get LocalHostName)}"
+HOST=$(darwin_host)
+require_darwin_host "${HOST}"
+
 FLAKE_SYSTEM="darwinConfigurations.${HOST}.system"
 
 export NIXPKGS_ALLOW_UNFREE=1
 
-if ! nix --extra-experimental-features 'nix-command flakes' eval \
-  .#darwinConfigurations --apply "cfgs: builtins.hasAttr \"${HOST}\" cfgs" \
-  2>/dev/null | grep -q true; then
-  echo "${RED}No darwinConfigurations.${HOST} in this flake.${NC}"
-  echo "${YELLOW}Add a host entry to flake.nix, or set DARWIN_HOST to an existing one.${NC}"
-  exit 1
-fi
-
+# --no-link so there is no ./result to clean up afterwards, and
+# --print-out-paths so the built system is still discoverable. "$@" goes to
+# `nix build`, the only command this script runs.
 echo "${YELLOW}Building ${FLAKE_SYSTEM}...${NC}"
-nix --extra-experimental-features 'nix-command flakes' build ".#${FLAKE_SYSTEM}" "$@"
-
-echo "${YELLOW}Cleaning up...${NC}"
-unlink ./result
+nix_flake build ".#${FLAKE_SYSTEM}" --no-link --print-out-paths "$@"
 
 echo "${GREEN}Build complete — nothing was activated. Use build-switch for that.${NC}"
