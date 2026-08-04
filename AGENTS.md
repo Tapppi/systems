@@ -27,7 +27,15 @@ The repository structure is based on [dustinlyons/nixos-config](https://github.c
 
 - **macOS Configuration**: In progress of being migrated from
   [tapppi/macos-setup](https://github.com/tapppi/macos-setup)
-  - No working setup has yet been achieved, currently fleshing out the initial configuration
+  - `asterix` (the Apple Silicon Mac) has a working, activated configuration in
+    `hosts/darwin-minimal/`. It is deliberately narrow while the migration
+    proceeds: the nix-rosetta-builder Linux builder, neovim (built from
+    `flakes/nvim`), neovide wrapped to launch that exact neovim, and the
+    Determinate Nix accommodations. Everything else on that machine is still
+    owned by `macos-setup` — check there before assuming something is managed here.
+  - `hosts/darwin/` is the full-featured upstream starter, kept as a reference
+    for the eventual migration. It has never been activated. See the warning in
+    "Building Configurations" below.
 - **NixOS Configuration**: Placeholder/untested
   - Not being actively worked on, but shared functionality kept in sync as "best effort" to reduce eventual work
 - **Neovim Configuration**: Fully functional, more information in @flakes/nvim/AGENTS.md
@@ -151,6 +159,12 @@ this cannot happen by accident.
 This is recorded here so it need not be re-explained in conversation: state the
 correct command and move on, rather than reiterating why the alternatives are
 wrong every time.
+
+**Never activate without the user explicitly asking.** `nix run .#build-switch`,
+`darwin-rebuild switch`, and `nixos-rebuild` change live system state and are the
+user's call, not an agent's. Building is not activating: `nix run .#build`,
+`nix build`, `nix eval` and `nix flake check` are all safe and are the way to
+verify a change before proposing it.
 
 ### System Configuration vs. Imperative Package Install
 
