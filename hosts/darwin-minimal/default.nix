@@ -10,6 +10,8 @@
 # advertises the kvm + x86_64-linux features required to build NixOS disk
 # images (e.g. dogmatix's raw-efi). It populates nix.buildMachines, which the
 # hand-rendered /etc/nix/machines below registers with Determinate's daemon.
+# It is configured on-demand rather than always-resident — see the Linux builder
+# section below.
 { config, pkgs, lib, inputs, ... }:
 
 let
@@ -64,6 +66,23 @@ in
 
 {
   environment.systemPackages = [ nvim neovide ];
+
+  # --- Linux builder ---
+
+  # The module's default is a KeepAlive launchd daemon, so the VM runs whether or
+  # not anything is building — on a laptop that is a permanently resident ~1.4GB
+  # and a steady CPU trickle for the sake of builds that happen a few times a
+  # month. onDemand swaps that for socket activation: the VM is off at rest and
+  # boots itself when a Linux build arrives (which stalls that build a few
+  # seconds), then powers off again once idle.
+  #
+  # 15 minutes rather than the module's 180: the linger only needs to span the
+  # gaps *within* a working session on dogmatix or the bench hosts, and paying
+  # three hours of resident VM for one build defeats the point of onDemand.
+  nix-rosetta-builder = {
+    onDemand = true;
+    onDemandLingerMinutes = 15;
+  };
 
   # --- Four Determinate-Nix accommodations (mirrored from ../darwin/default.nix;
   # keep the machines renderer in sync if nix-darwin's own format changes) ---
