@@ -68,9 +68,7 @@
           #!/usr/bin/env bash
           PATH=${nixpkgs.legacyPackages.${system}.git}/bin:$PATH
           echo "Running ${scriptName} for ${system}"
-          # "$@" matters: without it every flag passed as `nix run .#x -- --flag`
-          # is silently dropped, so e.g. `nix run .#build-switch -- --dry-run`
-          # would activate the system for real.
+          # Pass arguments, e.g. `nix run .#build-switch -- --dry-run`.
           exec ${self}/apps/${system}/${scriptName} "$@"
         '')}/bin/${scriptName}";
       };
@@ -82,11 +80,7 @@
         "check-keys" = mkApp "check-keys" system;
         "install" = mkApp "install" system;
       };
-      # Only apps that actually exist under apps/aarch64-darwin/. The starter
-      # also declared apply/copy-keys/create-keys/check-keys, but no such
-      # scripts are present for darwin, so those attributes could only ever
-      # fail at exec. `apply` in particular is the starter's token-substitution
-      # script — see apps/aarch64-darwin/apply for why it stays unwired.
+      # Only apps used on darwin.
       mkDarwinApps = system: {
         "build" = mkApp "build" system;
         "build-switch" = mkApp "build-switch" system;
@@ -97,17 +91,13 @@
       devShells = forAllSystems devShell;
       apps = nixpkgs.lib.genAttrs linuxSystems mkLinuxApps // nixpkgs.lib.genAttrs darwinSystems mkDarwinApps;
 
-      # Keyed by hostname only. The upstream starter's per-architecture entry
-      # (darwinConfigurations.aarch64-darwin, built from ./hosts/darwin) is
-      # deliberately NOT instantiated here: it has never been activated, and
-      # switching to it would hand the Homebrew install that tapppi/macos-setup
-      # manages over to nix-homebrew. ./hosts/darwin and modules/darwin/ remain
-      # on disk as the reference for the eventual full migration; re-add an
-      # entry here when one of them is actually ready to activate.
+      # Keyed by hostname only. The upstream starter's per-architecture entry is
+      # not instantiated: it would override configuration that tapppi/macos-setup
+      # still manages. See ./hosts/darwin/default.nix for that example config and
+      # the flake wiring it used.
       darwinConfigurations = {
         # Minimal, self-contained config for this Mac (asterix): nvim, neovide
-        # and nix-rosetta-builder plus the Determinate accommodations. Mirrors
-        # nixosConfigurations.dogmatix below in being hostname-keyed.
+        # and nix-rosetta-builder plus the Determinate accommodations.
         asterix = darwin.lib.darwinSystem {
           system = "aarch64-darwin";
           specialArgs = inputs // { inherit inputs; };

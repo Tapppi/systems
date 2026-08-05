@@ -66,7 +66,6 @@ require_darwin_host() {
       --apply "cfgs: builtins.hasAttr \"${_h}\" cfgs" 2>"$_err"); then
     echo "${RED}Could not evaluate this flake's darwinConfigurations:${NC}" >&2
     cat "$_err" >&2
-    echo "${YELLOW}The host '${_h}' may also be missing, but fix the above first.${NC}" >&2
     rm -f "$_err"
     return 1
   fi

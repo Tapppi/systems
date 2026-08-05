@@ -135,22 +135,15 @@ in
 
   # --- Base darwin requirements ---
 
-  # Pin the machine's names so every activation re-asserts them.
-  #
-  # This is load-bearing for the apps in apps/aarch64-darwin/: they resolve the
-  # darwinConfigurations attribute from the machine's own name, so if the name
-  # drifts, `nix run .#build-switch` stops finding its host. LocalHostName is
-  # the one that drifts — mDNSResponder renames it (asterix -> asterix-2) when
-  # another device on the LAN claims the same Bonjour name. Declaring the names
-  # here means the next switch puts them back.
-  #
-  # hostName is `scutil --set HostName`, the command-line/SSH name and the one
-  # the apps read; localHostName defaults to it but is stated explicitly since
-  # it is the value actually at risk of drifting.
+  # Set machine names on activation. The machine name is what apps/ resolves the
+  # darwinConfigurations entry from, so it must not drift: localHostName defaults
+  # to hostName, but mDNSResponder rewrites it (asterix -> asterix-2) on a
+  # Bonjour name conflict on the LAN, so state it explicitly to put it back.
   networking = {
     hostName = hostname;
     localHostName = hostname;
-    computerName = hostname;
+    # Display name only; hostName is the source of truth.
+    computerName = "Asterix";
   };
 
   system.checks.verifyNixPath = false;

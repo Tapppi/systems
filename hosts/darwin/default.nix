@@ -1,15 +1,51 @@
 # REFERENCE ONLY — not instantiated in flake.nix, so nothing builds this.
 #
 # The full-featured dustinlyons starter (home-manager, homebrew, dock, system
-# defaults), kept as the worked reference for the macos-setup migration. The
-# live config for this Mac is ../darwin-minimal, which deliberately does not
-# import this file.
+# defaults), kept as the worked reference for the macos-setup migration and for
+# the generic-configuration case (installing a base config without a full host).
+# The live config for this Mac is ../darwin-minimal, which does not import this.
 #
-# It is not exposed as a darwinConfigurations entry because activating it would
-# apply nix-homebrew with `autoMigrate = true` to the Homebrew install that
-# tapppi/macos-setup still manages. Wire it up only when a piece of it is
-# genuinely ready to activate — and note ADR-002 slates the per-architecture
-# starter tree for removal once `systems` becomes a module library.
+# It is not instantiated because activating it would override configuration that
+# tapppi/macos-setup still manages — notably nix-homebrew with
+# `autoMigrate = true` taking over the existing Homebrew install.
+#
+# The flake wiring it used is preserved here, since flake.nix no longer carries
+# it and it is the "how was this actually configured" reference for the coming
+# split into modules vs. host/generic configurations:
+#
+#   darwinConfigurations = nixpkgs.lib.genAttrs darwinSystems (system: let
+#     user = "tapani";
+#   in
+#     darwin.lib.darwinSystem {
+#       inherit system;
+#       # Spread the inputs as individual module args (upstream starter's
+#       # convention) *and* expose the whole set as `inputs`, which the
+#       # home-manager modules take as an argument.
+#       specialArgs = inputs // { inherit inputs; };
+#       modules = [
+#         home-manager.darwinModules.home-manager
+#         nix-homebrew.darwinModules.nix-homebrew
+#         inputs.nix-rosetta-builder.darwinModules.default
+#         {
+#           nix-homebrew = {
+#             inherit user;
+#             enable = true;
+#             taps = {
+#               "homebrew/homebrew-core" = homebrew-core;
+#               "homebrew/homebrew-cask" = homebrew-cask;
+#               "homebrew/homebrew-bundle" = homebrew-bundle;
+#             };
+#             mutableTaps = false;
+#             autoMigrate = true;
+#           };
+#         }
+#         ./hosts/darwin
+#       ];
+#     }
+#   )
+#
+# Note ADR-002 slates the per-architecture starter tree for removal once
+# `systems` becomes a module library.
 { config, pkgs, lib, ... }:
 
 let user = "tapani"; in
