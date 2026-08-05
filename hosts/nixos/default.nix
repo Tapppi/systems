@@ -1,7 +1,15 @@
 { config, inputs, pkgs, ... }:
 
 let user = "tapani";
-    keys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOk8iAnIaa1deoc7jw8YACPNVka1ZFJxhnU4G74TmS+p" ]; in
+    # Authorized SSH keys for `user` and `root` below.
+    #
+    # Deliberately empty. This previously held the dustinlyons starter's own
+    # key — a third party's — which would have authorised a stranger for
+    # wheel-group SSH on any host built from this file. The wiring is kept so
+    # the shape survives into the modules split; populate it from the fleet key
+    # (see hosts/nixos/dogmatix, which does not import this file) before
+    # activating anything from here.
+    keys = [ ]; in
 {
   imports = [
     ../../modules/nixos/disk-config.nix
