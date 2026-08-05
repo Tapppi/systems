@@ -32,7 +32,15 @@ let
   };
 
   workerPy = pkgs.writeText "bench-worker.py" ''
-    """Minimal bench worker: no-op + sleep tasks, keeps lease sweeps alive."""
+    """Minimal bench worker: no-op, sleep and HITL tasks; keeps lease sweeps
+    alive.
+
+    Everything runnable on the `default` and `gpu` queues is registered here,
+    in one registry per queue. That is a constraint, not a convenience: a
+    worker claims task names it has no handler for and pushes them back with a
+    delay of a minute or more instead of leaving them for a worker that does,
+    so a second process registering different names on the same queue costs a
+    random multiple of that delay per task."""
     import os
     import sys
     import time
@@ -49,6 +57,15 @@ let
     @app.register_task(name="bench-noop", queue=queue)
     def bench_noop(params, ctx):
         return {"ok": True, "queue": queue, "params": params}
+
+    @app.register_task(name="bench-hitl-scoped", queue=queue)
+    def bench_hitl_scoped(params, ctx):
+        # The approval event name carries the job id. Absurd events are
+        # permanent, so a fixed name is satisfied instantly and for all time by
+        # the first emission ever made, and an approval for one job would
+        # release every job parked after it.
+        return {"ok": True,
+                "approval": ctx.await_event("bench:approval:" + params["job"])}
 
     @app.register_task(name="bench-sleep", queue=queue)
     def bench_sleep(params, ctx):

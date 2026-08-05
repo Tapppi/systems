@@ -38,6 +38,12 @@ in
 
   networking.hostName = "bench-temporal";
 
+  # The frontend, reachable over incusbr0 as well as the tailnet: bench-load
+  # runs the soak's workers off the tailnet on purpose (see that guest's
+  # comment on the resolver dependency). The bridge is NAT-only and private to
+  # dogmatix, so this exposes nothing the host does not already expose.
+  networking.firewall.allowedTCPPorts = [ 7233 ];
+
   services.temporal = {
     enable = true;
     settings = {
@@ -174,15 +180,16 @@ in
     after = [ "temporal.service" ];
     serviceConfig = {
       Type = "oneshot";
-      # Six HTTP calls per run; the ceiling keeps a stuck run from overlapping
-      # the next timer tick and leaving the gauges silently stale.
+      # Three loopback HTTP calls per queue; the ceiling keeps a stuck run
+      # from overlapping the next timer tick and leaving the gauges silently
+      # stale, so it stays below the 30 s interval whatever the queue count.
       TimeoutStartSec = "25s";
     };
     environment = {
       CURL = "${pkgs.curl}/bin/curl";
       JQ = "${pkgs.jq}/bin/jq";
       POLLER_FOOTER = "${../../../modules/nixos/bench/poller-footer.sh}";
-      TEMPORAL_QUEUES = "bench-default bench-gpu";
+      TEMPORAL_QUEUES = "bench-default bench-gpu compose-temporal compose-temporal-gpu";
     };
     script = "exec ${pkgs.bash}/bin/bash ${./temporal-queue-metrics.sh}";
   };

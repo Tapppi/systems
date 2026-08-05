@@ -26,7 +26,7 @@
 # the same Nix values that define those things, never restated here. A rule
 # asserting a count that has quietly gone stale is the failure this file
 # exists to prevent, committed by the file itself.
-{ lib, jobs, nodeTargetCount, dashboardCount }:
+{ lib, jobs, nodeTargetCount, dashboardCount, soakEngines }:
 
 let
   # Every poller writes the same liveness triplet (see
@@ -44,6 +44,13 @@ let
     { prefix = "incus_trust"; staleAfter = 172800; }
   ];
   anyPoller = f: lib.concatMapStringsSep "\n  or " f pollers;
+
+  # The soak drivers publish the same liveness triplet as the pollers but are
+  # a different kind of thing: a poller that stops means a signal is missing,
+  # a driver that stops means the experiment is missing. They get their own
+  # rules so the distinction survives into the alert name someone reads at
+  # hour 60 of a 72 h run.
+  anySoak = f: lib.concatMapStringsSep "\n  or " f soakEngines;
 in
 {
   fleet = {
@@ -473,6 +480,95 @@ in
         for = "10m";
         labels.severity = "warning";
         annotations.summary = "Queue {{ $labels.queue }} has work waiting over 15 min — is a worker attached?";
+      }
+    ];
+  };
+
+  soak = {
+    name = "bench-soak";
+    rules = [
+      {
+        # A dead driver and an idle engine are indistinguishable in every
+        # engine-side metric — the queue is empty either way. This is the only
+        # rule that separates them, and it is the one that decides whether a
+        # three-day soak measured anything at all.
+        alert = "SoakDriverDown";
+        expr = ''${anySoak (e: "soak_driver_up{engine=\"${e}\"} == 0")}'';
+        for = "5m";
+        labels.severity = "critical";
+        annotations.summary = "Soak driver for {{ $labels.engine }} reported failure";
+      }
+      {
+        # Absence, not zero: a driver whose process is gone stops rewriting
+        # its textfile and the gauge goes stale rather than false. The
+        # timestamp is the only reading that degrades in the right direction.
+        alert = "SoakDriverMissing";
+        expr = ''
+          ${anySoak (e: "absent(soak_driver_up{engine=\"${e}\"})")}
+          or ${anySoak (e: "time() - soak_driver_last_success_timestamp_seconds{engine=\"${e}\"} > 300")}
+        '';
+        for = "5m";
+        labels.severity = "critical";
+        annotations.summary = "A soak driver has stopped publishing";
+      }
+      {
+        # Restarts reset the counters, which is intended — but a driver that
+        # restarts repeatedly invalidates the throughput series it publishes.
+        alert = "SoakDriverRestarting";
+        expr = ''increase(node_systemd_service_restart_total{name=~"soak-.*\\.service"}[1h]) > 2'';
+        for = "10m";
+        labels.severity = "warning";
+        annotations.summary = "{{ $labels.name }} has restarted repeatedly during the soak";
+      }
+      {
+        # Backpressure is a safety rail, not a normal state: it means a queue
+        # is not draining, which for the soak means a worker is gone. Brief
+        # pauses after a burst are expected, hours of them are not.
+        alert = "SoakDriverPaused";
+        expr = "soak_paused == 1";
+        for = "30m";
+        labels.severity = "warning";
+        annotations.summary = "Soak driver for {{ $labels.engine }} has been backpressured for 30 min";
+      }
+      {
+        # The rail's own failure mode: if the depth cannot be read the driver
+        # keeps producing for a grace window and then stops. Either half of
+        # that is worth knowing before the pause arrives.
+        alert = "SoakBacklogUnreadable";
+        expr = "soak_backlog_known == 0";
+        for = "5m";
+        labels.severity = "warning";
+        annotations.summary = "Soak driver for {{ $labels.engine }} cannot read its queue depth";
+      }
+      {
+        # Submissions that raise are the driver's view of an engine being
+        # unavailable, and they are counted rather than logged so a failure
+        # that healed inside a scrape interval is still visible afterwards.
+        alert = "SoakSubmitErrors";
+        expr = "increase(soak_submit_errors_total[30m]) > 5";
+        for = "0m";
+        labels.severity = "warning";
+        annotations.summary = "Soak driver for {{ $labels.engine }} failed to submit {{ $labels.kind }} work";
+      }
+      {
+        # The composite share is the most fragile part of the load and the
+        # first thing to break silently: a graph run that times out still
+        # leaves a completed-looking engine run behind it.
+        alert = "SoakGraphRunsFailing";
+        expr = ''increase(soak_graph_runs_total{result!="ok"}[2h]) > 2'';
+        for = "0m";
+        labels.severity = "warning";
+        annotations.summary = "Composite graph runs on {{ $labels.engine }} are failing ({{ $labels.result }})";
+      }
+      {
+        # Growth that would not fit a year of homelab volume. Watched live
+        # rather than only at evaluation, because a runaway table is the one
+        # soak outcome that can fill the pool before the window closes.
+        alert = "SoakDatabaseGrowth";
+        expr = "pg_database_size_bytes > 8e9";
+        for = "10m";
+        labels.severity = "warning";
+        annotations.summary = "{{ $labels.datname }} has passed 8 GB during the soak";
       }
     ];
   };

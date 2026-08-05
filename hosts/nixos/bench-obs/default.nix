@@ -21,12 +21,17 @@ let
   # testing for absence.
   nodeTargets = {
     host = [ "dogmatix:9100" ];
-    guest = [ "bench-obs:9100" "bench-absurd:9100" "bench-temporal:9100" ];
+    guest = [ "bench-obs:9100" "bench-absurd:9100" "bench-temporal:9100" "bench-load:9100" ];
   };
   otherJobs = [ "temporal" "hatchet" "postgres" "prometheus" "grafana" "incus" ];
 
+  # The three Phase 6 soak drivers, each publishing the poller liveness
+  # triplet through bench-load's textfile collector. Passed in so the rules
+  # are generated from the same list the units are named after.
+  soakEngines = [ "temporal" "hatchet" "absurd" ];
+
   alertRules = import ./alert-rules.nix {
-    inherit lib;
+    inherit lib soakEngines;
     jobs = [ "node" ] ++ otherJobs;
     nodeTargetCount = lib.length (nodeTargets.host ++ nodeTargets.guest);
     # The same directory Grafana provisions from, so the rule is a genuine
@@ -38,6 +43,13 @@ in
   imports = [ ../../../modules/nixos/bench/guest-base.nix ];
 
   networking.hostName = "bench-obs";
+
+  # bench-load is not a tailnet node (see that guest for why), so it is named
+  # and scraped over incusbr0 by its pinned bridge address, and its drivers
+  # read their own backpressure signal from this Prometheus over the same
+  # path. The bridge is NAT-only and private to dogmatix.
+  networking.hosts."10.135.155.157" = [ "bench-load" ];
+  networking.firewall.allowedTCPPorts = [ 9090 ];
 
   services.prometheus = {
     enable = true;
@@ -156,7 +168,8 @@ in
     environment = {
       HATCHET_API_URL = "http://dogmatix:8888";
       OUT = "/var/lib/node-exporter-textfile/hatchet.prom";
-      HATCHET_QUEUES = "bench-noop bench-gpu bench-hitl bench-cron bench-burst";
+      HATCHET_QUEUES = "bench-noop bench-gpu bench-hitl bench-cron bench-burst"
+        + " compose-hatchet compose-hatchet-loop compose-hatchet-turn";
     };
     script = "exec ${pkgs.python3}/bin/python3 ${./hatchet-queue-metrics.py}";
   };

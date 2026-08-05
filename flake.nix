@@ -152,6 +152,11 @@
           specialArgs = inputs // { inherit inputs; };
           modules = [ ./hosts/nixos/bench-absurd ];
         };
+        bench-load = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = inputs // { inherit inputs; };
+          modules = [ ./hosts/nixos/bench-load ];
+        };
         bench-obs = nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           specialArgs = inputs // { inherit inputs; };
