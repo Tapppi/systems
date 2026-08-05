@@ -108,12 +108,13 @@ max_line_length = 120
 
 - **Nix**: Formatted with nixfmt, follows editorconfig rules
 - **Lua**: Formatted with StyLua which is configured to match editorconfig
-- **Shell scripts**: Follow bash best practices, 2-space indentation. Prefer portable idioms — these
-  run against both BSD and GNU tooling (a freshly imaged Mac has the BSD userland; a configured one
-  and every NixOS host have GNU), so write for both rather than assuming either. The recurring case
-  is `sed -i`: use `sed -i.bak … && rm -f …bak`, never `sed -i ''` (BSD-only) or bare `sed -i`
-  (GNU-only). The same care applies to `readlink -f`, `date`, `stat`, `sort`, `grep -P` and
-  `find -printf`
+- **Shell scripts**: Follow bash best practices, 2-space indentation. Bootstrap code must be
+  portable; everything else can assume GNU. Scripts that bring a machine up (`scripts/`, the
+  `apps/`, anything run before a config is activated) may execute against a stock BSD macOS
+  userland, so they must work under both — chiefly `sed -i.bak … && rm -f …bak` rather than
+  `sed -i ''` (BSD-only) or bare `sed -i` (GNU-only); same care for `readlink -f`, `date`, `stat`,
+  `sort`, `grep -P` and `find -printf`. Anything running on an already-configured macOS host or on
+  NixOS has GNU first on PATH and can rely on it
 - **Markdown**: Formatted with markdownlint-cli2, follows editorconfig rules
 
 ### Nix Style Guidelines

@@ -143,7 +143,7 @@ in
     hostName = hostname;
     localHostName = hostname;
     # Display name only; hostName is the source of truth.
-    computerName = "Asterix";
+    computerName = lib.toSentenceCase hostname;
   };
 
   system.checks.verifyNixPath = false;
