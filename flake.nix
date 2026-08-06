@@ -72,13 +72,36 @@
           exec ${self}/apps/${system}/${scriptName} "$@"
         '')}/bin/${scriptName}";
       };
+      # Only apps that exist under apps/<system>/ (aarch64-linux is a symlink to
+      # x86_64-linux). The starter also declared these, kept here as a record of
+      # what it modelled — none had a script in this repo, so they could only
+      # ever fail at exec:
+      #
+      #   "install"     = mkApp "install" system;      # bare-metal NixOS installer.
+      #                     Superseded by scripts/install-dogmatix-emmc.sh; the
+      #                     steady-state entrypoints are build-switch/rollback.
+      #   "copy-keys"   = mkApp "copy-keys" system;    # ~/.ssh/id_ed25519{,_agenix}
+      #   "create-keys" = mkApp "create-keys" system;  #   from/to a USB stick, for
+      #   "check-keys"  = mkApp "check-keys" system;   #   the starter's agenix flow.
+      #                     Secrets are going to 1Password now and a homelab manager
+      #                     (vaultwarden?) later — see ADR-003 — so files-on-disk key
+      #                     scripts are not the model we want; what to keep is how
+      #                     they were wired, not the scripts.
+      #
+      #   "apply"       = mkApp "apply" system;        # token substitution. The
+      #                     NixOS %HOST%/%DISK%/%INTERFACE% placeholders it fills are
+      #                     still live, but it seds every file under the cwd including
+      #                     .git — see apps/aarch64-darwin/apply. ADR-002 retires the
+      #                     starter tree rather than fixing it.
+      # NOTE build-switch is itself still the starter's: it resolves the target
+      # from `uname -m` and switches to nixosConfigurations.<arch>, the untested
+      # placeholder, rather than to a hostname-keyed host like dogmatix. It is
+      # also non-executable, so it cannot currently run. Fix the target before
+      # arming it — the placeholder's `keys` list is now empty, so activating it
+      # would leave a host with no authorized SSH keys. Real deploys are
+      # push-based (HLB-9) via remote nixos-rebuild.
       mkLinuxApps = system: {
-        "apply" = mkApp "apply" system;
         "build-switch" = mkApp "build-switch" system;
-        "copy-keys" = mkApp "copy-keys" system;
-        "create-keys" = mkApp "create-keys" system;
-        "check-keys" = mkApp "check-keys" system;
-        "install" = mkApp "install" system;
       };
       # Only apps used on darwin.
       mkDarwinApps = system: {

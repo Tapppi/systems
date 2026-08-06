@@ -47,7 +47,7 @@ The repository structure is based on [dustinlyons/nixos-config](https://github.c
 
 ### Directory Structure
 
-```
+```text
 .
 ├── apps/           # Nix commands for bootstrapping and building per architecture
 │   ├── aarch64-darwin/
@@ -232,6 +232,7 @@ nix develop
 The repository uses a two-tier approach for package management:
 
 **packages.nix files** (`modules/{darwin,nixos,shared}/packages.nix`):
+
 - Contain lists of packages (CLI tools, terminal apps, development tools, fonts, etc.)
 - Return a simple array of packages
 - **Shared packages.nix** is dual-loaded on Darwin:
@@ -241,6 +242,7 @@ The repository uses a two-tier approach for package management:
 - Platform-specific files import and extend the shared list
 
 **home-manager.nix files** (`modules/{darwin,nixos,shared}/home-manager.nix`):
+
 - Configure program settings and services (zsh, git, polybar, dunst, etc.)
 - Manage dotfiles and user files
 - Import packages.nix via `home.packages = pkgs.callPackage ./packages.nix {}`
@@ -264,6 +266,7 @@ The repository uses a two-tier approach for package management:
   - Most packages should go in home-manager instead
 
 **Examples:**
+
 - Adding `ripgrep` → `modules/shared/packages.nix` (simple CLI tool)
 - Adding `dockutil` → `modules/darwin/packages.nix` (macOS-specific utility)
 - Configuring `zsh` → `modules/shared/programs.nix` (needs configuration)
@@ -295,4 +298,3 @@ Key points:
 
 - Standalone flake in `flakes/nvim/`
 - Integrated via `modules/shared/nvim/`
-
