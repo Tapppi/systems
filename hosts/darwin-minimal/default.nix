@@ -73,12 +73,24 @@ in
   # not anything is building — on a laptop that is a permanently resident ~1.4GB
   # and a steady CPU trickle for the sake of builds that happen a few times a
   # month. onDemand swaps that for socket activation: the VM is off at rest and
-  # boots itself when a Linux build arrives (which stalls that build a few
-  # seconds), then powers off again once idle.
+  # boots itself when a Linux build arrives, then powers off again once idle.
+  # A cold build blocks for the boot rather than failing — measured at 19s from
+  # a powered-off VM, against 2s warm.
   #
   # 15 minutes rather than the module's 180: the linger only needs to span the
   # gaps *within* a working session on dogmatix or the bench hosts, and paying
   # three hours of resident VM for one build defeats the point of onDemand.
+  #
+  # Caveat worth knowing before it bites: the daemon's start script compares the
+  # rendered lima.yaml against the deployed one and, on any difference, deletes
+  # and recreates the VM instead of booting it. The yaml embeds the guest disk
+  # image's store path, so a nixpkgs bump — or touching cores/memory/diskSize/
+  # onDemandLingerMinutes, which rebuild that image — makes the next wake a
+  # multi-minute re-create. A Linux build that lands in that window can fail
+  # outright ("Cannot build … platform mismatch") because nix's build hook gives
+  # up before the VM exists; re-running it then succeeds. Enabling onDemand did
+  # exactly this once. To absorb it deliberately, run `builder up` (macos-setup
+  # .functions) after a switch that changed the builder.
   nix-rosetta-builder = {
     onDemand = true;
     onDemandLingerMinutes = 15;
