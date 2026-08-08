@@ -44,9 +44,9 @@ let
   # directory; only the command differs. Shared so that a change to the
   # sandboxing or the restart policy cannot apply to eleven units and miss
   # the twelfth.
-  soakUnit = { description, exec, extraEnv ? { }, after ? [ ] }: {
+  soakUnit = { description, exec, extraEnv ? { }, after ? [ ], autostart ? true }: {
     inherit description;
-    wantedBy = [ "multi-user.target" ];
+    wantedBy = lib.optional autostart "multi-user.target";
     after = [ "network-online.target" "soak-venv.service" ] ++ after;
     wants = [ "network-online.target" ];
     requires = [ "soak-venv.service" ];
@@ -245,10 +245,16 @@ in
   # `run_no_wait()` warns on every call, which at the trickle rate is tens of
   # thousands of journal lines over the window with a real error somewhere in
   # among them. A worker's warnings are rare enough to be worth reading.
+  #
+  # Drivers do not autostart: load generation is an operator decision, and a
+  # driver that comes up with the guest restarts load on any reboot — during
+  # an idle-measurement window that silently ruins the measurement. Start by
+  # hand: `systemctl start soak-driver-{temporal,hatchet,absurd}`.
   systemd.services.soak-driver-temporal = soakUnit {
     description = "Soak load driver — Temporal";
     exec = "${py} -m benchlib.soak temporal";
     after = [ "soak-worker-temporal-default.service" ];
+    autostart = false;
     extraEnv = {
       COMPOSE_ABSURD_GPU_QUEUE = "ikeh_gpu";
       PYTHONWARNINGS = "ignore::DeprecationWarning";
@@ -257,6 +263,7 @@ in
   systemd.services.soak-driver-hatchet = soakUnit {
     description = "Soak load driver — Hatchet";
     exec = "${py} -m benchlib.soak hatchet";
+    autostart = false;
     after = [ "soak-worker-hatchet-cpu.service" ];
     extraEnv = {
       COMPOSE_ABSURD_GPU_QUEUE = "ikeh_gpu";
@@ -266,6 +273,7 @@ in
   systemd.services.soak-driver-absurd = soakUnit {
     description = "Soak load driver — Absurd";
     exec = "${py} -m benchlib.soak absurd";
+    autostart = false;
     extraEnv = {
       COMPOSE_ABSURD_GPU_QUEUE = "ikeh_gpu";
       PYTHONWARNINGS = "ignore::DeprecationWarning";
