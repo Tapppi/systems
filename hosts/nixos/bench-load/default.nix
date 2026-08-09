@@ -44,7 +44,11 @@ let
   # directory; only the command differs. Shared so that a change to the
   # sandboxing or the restart policy cannot apply to eleven units and miss
   # the twelfth.
-  soakUnit = { description, exec, extraEnv ? { }, after ? [ ], autostart ? true }: {
+  # `restart` is "always" for everything that must survive the soak and "no"
+  # for the load drivers, which run a bounded ramp and are done when it ends —
+  # an always-restarted driver would start the next run on its own.
+  soakUnit = { description, exec, extraEnv ? { }, after ? [ ], autostart ? true
+             , restart ? "always" }: {
     inherit description;
     wantedBy = lib.optional autostart "multi-user.target";
     after = [ "network-online.target" "soak-venv.service" ] ++ after;
@@ -66,7 +70,7 @@ let
       Group = "soak";
       WorkingDirectory = code;
       ExecStart = exec;
-      Restart = "always";
+      Restart = restart;
       # Long enough that a genuinely broken unit does not spin against the
       # engines, short enough that a transient DB blip costs seconds.
       RestartSec = 15;
@@ -278,5 +282,67 @@ in
       COMPOSE_ABSURD_GPU_QUEUE = "ikeh_gpu";
       PYTHONWARNINGS = "ignore::DeprecationWarning";
     };
+  };
+
+  # ---- L4 saturation test ------------------------------------------------
+  # The load-test workers and drivers (tieto goldmill/wiki/reviews/bench/
+  # load-test-plan.md). All three engines' load workers run here, on queues
+  # nothing else polls, because worker placement that differs per engine makes
+  # a ceiling a measure of worker hosting.
+  #
+  # Nothing here autostarts. Saturation is an operator decision and a driver
+  # that comes up with its guest restarts a ceiling search on any reboot.
+  # Start a run by hand, one engine at a time:
+  #
+  #   systemctl start load-worker-hatchet
+  #   systemctl start load-driver-hatchet          # the full ramp
+  #   # or a single fixed-rate step, which takes arguments:
+  #   systemd-run --uid=soak --gid=soak --working-directory=/var/lib/bench-soak/code \
+  #     -E PYTHONPATH=/var/lib/bench-soak/code -E LD_LIBRARY_PATH=… \
+  #     /var/lib/bench-soak/venv/bin/python -m benchlib.load step hatchet 2 60
+  systemd.services.load-worker-temporal = soakUnit {
+    description = "Temporal load worker (load-temporal)";
+    exec = "${py} -m benchlib.temporal_bench worker load-temporal";
+    autostart = false;
+  };
+  systemd.services.load-worker-hatchet = soakUnit {
+    description = "Hatchet load worker (load-noop only)";
+    exec = "${py} -m benchlib.hatchet_bench loadworker load-hatchet 32";
+    autostart = false;
+    extraEnv.PYTHONWARNINGS = "ignore::DeprecationWarning";
+  };
+  # The one Absurd worker this guest carries. It is safe here and the soak
+  # workers are not, because `load` is a queue bench-absurd's registries never
+  # poll — see the note above about cross-registry pushback.
+  systemd.services.load-worker-absurd = soakUnit {
+    description = "Absurd load worker (queue load, load-noop only)";
+    exec = "${py} -m benchlib.load_worker worker load";
+    autostart = false;
+  };
+
+  # One driver per engine, running the full ramp with the plan's defaults. The
+  # profile lives in the driver, not here, so the numbers exist in one place.
+  systemd.services.load-driver-temporal = soakUnit {
+    description = "L4 load driver — Temporal (ramp)";
+    exec = "${py} -m benchlib.load ramp temporal";
+    after = [ "load-worker-temporal.service" ];
+    autostart = false;
+    restart = "no";
+    extraEnv.PYTHONWARNINGS = "ignore::DeprecationWarning";
+  };
+  systemd.services.load-driver-hatchet = soakUnit {
+    description = "L4 load driver — Hatchet (ramp)";
+    exec = "${py} -m benchlib.load ramp hatchet";
+    after = [ "load-worker-hatchet.service" ];
+    autostart = false;
+    restart = "no";
+    extraEnv.PYTHONWARNINGS = "ignore::DeprecationWarning";
+  };
+  systemd.services.load-driver-absurd = soakUnit {
+    description = "L4 load driver — Absurd (ramp)";
+    exec = "${py} -m benchlib.load ramp absurd";
+    after = [ "load-worker-absurd.service" ];
+    autostart = false;
+    restart = "no";
   };
 }
