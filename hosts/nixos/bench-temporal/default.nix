@@ -189,7 +189,7 @@ in
       CURL = "${pkgs.curl}/bin/curl";
       JQ = "${pkgs.jq}/bin/jq";
       POLLER_FOOTER = "${../../../modules/nixos/bench/poller-footer.sh}";
-      TEMPORAL_QUEUES = "bench-default bench-gpu compose-temporal compose-temporal-gpu";
+      TEMPORAL_QUEUES = "bench-default bench-gpu compose-temporal compose-temporal-gpu load-temporal";
     };
     script = "exec ${pkgs.bash}/bin/bash ${./temporal-queue-metrics.sh}";
   };
