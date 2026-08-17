@@ -1,10 +1,11 @@
 # Minimal nix-darwin configuration for asterix (M-series Mac, Determinate Nix).
 #
-# Scope: only what is needed to bring the nix-rosetta-builder Linux builder
-# online and provide nvim (plus its GUI, neovide) on PATH. No home-manager, no
-# homebrew, no dock/system defaults. The full-featured starter lives in
-# ../darwin/default.nix and is a reference for a later migration; this module
-# deliberately does not import it.
+# Scope: what is needed to bring the nix-rosetta-builder Linux builder online,
+# provide nvim (plus its GUI, neovide) on PATH, and mirror this Mac's agent
+# session transcripts to the homelab archive. No home-manager, no homebrew, no
+# dock/system defaults. The full-featured starter lives in ../darwin/default.nix
+# and is a reference for a later migration; this module deliberately does not
+# import it.
 #
 # The nix-rosetta-builder module (wired in flake.nix) enables by default and
 # advertises the kvm + x86_64-linux features required to build NixOS disk
@@ -65,6 +66,8 @@ let
 in
 
 {
+  imports = [ ../../modules/darwin/session-sync.nix ];
+
   environment.systemPackages = [ nvim neovide ];
 
   # --- Linux builder ---
