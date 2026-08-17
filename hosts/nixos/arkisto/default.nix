@@ -34,7 +34,9 @@ let
   # (asterix, tmopro18). Empty means no Mac can write to the archive yet.
   # A key listed here is never a login: the forced command below replaces
   # whatever the client asked to run.
-  syncKeys = [ ];
+  syncKeys = [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIfM1dNWxJMQsnNncq3BFdlFw8jUYT6kIiTHhmLZ8aqu sync@asterix"
+  ];
 
   # rrsync is its own top-level package in nixpkgs — pkgs.rsync ships rsync
   # and rsync-ssl only.
