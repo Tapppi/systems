@@ -1,94 +1,17 @@
-# Shared base for bench-* NixOS LXC guests under Incus on dogmatix
-# (workflow-engine bench; see tieto goldmill/wiki/reviews/bench/).
+# Bench-specific base for the bench-* NixOS LXC guests under Incus on
+# dogmatix (workflow-engine bench; see tieto goldmill/wiki/reviews/bench/).
+# Everything these guests share with every other LXC guest lives in
+# ../lxc-guest.nix.
 #
-# Guest *contents* are declarative via this flake; guest *lifecycle* is
-# imperative Incus until HLB-9/kone land:
+# The bench-guest Incus profile adds security.nesting=true to the shared
+# device set — without nesting, nix builds inside the unprivileged guest fail
+# on sandbox namespace setup:
 #   incus launch images:nixos/unstable <name> -p default -p bench-guest
-# The bench-guest Incus profile carries the /dev/net/tun device Tailscale
-# needs and security.nesting=true — without nesting, nix builds inside the
-# unprivileged guest fail on sandbox namespace setup. Deploy/update by pushing this repo into the guest and running
-#   nixos-rebuild switch --flake /root/systems#<name>
-# (or nixos-rebuild --target-host over the tailnet once the guest is joined).
-# Keep these modules plain — no option abstractions.
-{ config, ... }:
+#
+# Join each guest to the tailnet once by hand:
+#   incus exec <name> -- tailscale up --ssh
+{ ... }:
 
-let
-  keys = [
-    # "Asterix Identity" — the single fleet key, held in 1Password. See
-    # modules/nixos/dogmatix/users.nix for retrieval notes and decoys to
-    # avoid.
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPmxkJJ/WnwVmYdvylfvp4D+qOAcNMQ/gzFLGkPXVVJ5"
-  ];
-in
 {
-  imports = [ ../../shared ];
-
-  # NixOS-in-LXC: systemd container mode, no kernel or bootloader managed
-  # inside the guest.
-  boot.isContainer = true;
-
-  # The images:nixos LXC image ships /sbin/init as a static symlink into the
-  # image's original store path, so a plain nixos-rebuild switch would boot
-  # back into the image generation on restart. Keep init pointed at the
-  # system profile instead (idempotent; runs on every activation).
-  system.activationScripts.benchGuestInit = ''
-    ln -sfn /nix/var/nix/profiles/system/init /sbin/init
-  '';
-
-  # No console TTY is attached under Incus; the unit just flaps and turns
-  # every switch-to-configuration into exit 4. Access is incus exec + SSH.
-  systemd.services.console-getty.enable = false;
-
-  # MagicDNS (bare bench-* names) needs a resolv manager for tailscaled to
-  # program. isContainer defaults to the host's resolv.conf, which resolved
-  # rejects — the guest manages its own.
-  services.resolved.enable = true;
-  networking.useHostResolvConf = false;
-
-  # Every guest exports node metrics; bench-obs scrapes them over the
-  # tailnet. The textfile collector lets guests publish custom gauges (e.g.
-  # absurd queue depth) from timers.
-  services.prometheus.exporters.node = {
-    enable = true;
-    enabledCollectors = [ "systemd" "textfile" ];
-    extraFlags = [
-      "--collector.textfile.directory=/var/lib/node-exporter-textfile"
-      # A service that crashes and is restarted is `active` again well before
-      # the next 15 s scrape, so unit state alone cannot distinguish running
-      # from running *again*. This counter is the only signal that does.
-      "--collector.systemd.enable-restarts-metrics"
-    ];
-  };
-  systemd.tmpfiles.rules = [ "d /var/lib/node-exporter-textfile 0755 root root -" ];
-
-  networking = {
-    useDHCP = true; # eth0 from incusbr0 (NAT)
-    nftables.enable = true;
-    firewall = {
-      enable = true;
-      allowedTCPPorts = [ 22 ];
-      allowedUDPPorts = [ config.services.tailscale.port ];
-      # Traffic over the overlay is already authenticated by Tailscale.
-      trustedInterfaces = [ "tailscale0" ];
-    };
-  };
-
-  # Each guest is its own tailnet node (bench-<name>), giving per-service
-  # names and ACL granularity. Daemon only — join once by hand:
-  #   incus exec <name> -- tailscale up --ssh
-  # The node key persists in /var/lib/tailscale across rebuilds.
-  services.tailscale.enable = true;
-
-  services.openssh = {
-    enable = true;
-    settings = {
-      PasswordAuthentication = false;
-      PermitRootLogin = "prohibit-password";
-    };
-  };
-  users.users.root.openssh.authorizedKeys.keys = keys;
-
-  nix.settings.experimental-features = [ "nix-command" "flakes" ];
-
-  system.stateVersion = "26.11";
+  imports = [ ../lxc-guest.nix ];
 }
