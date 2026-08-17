@@ -155,6 +155,16 @@
           modules = [ ./hosts/nixos/dogmatix ];
         };
 
+        # The archive guest: agent session transcripts mirrored off the Macs
+        # and host data evacuated from tmopro18, on an Incus custom storage
+        # volume attached at /data. Same imperative lifecycle as the bench
+        # guests — see modules/nixos/lxc-guest.nix.
+        arkisto = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = inputs // { inherit inputs; };
+          modules = [ ./hosts/nixos/arkisto ];
+        };
+
         # Workflow-engine bench guests: NixOS LXC system containers under
         # Incus on dogmatix (tieto goldmill/wiki/reviews/bench/). Lifecycle
         # is imperative (`incus launch images:nixos/unstable <name> -p
