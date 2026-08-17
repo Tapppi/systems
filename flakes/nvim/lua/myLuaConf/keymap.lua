@@ -50,6 +50,18 @@ function M.setup_global_keymaps()
   -- Copy to/from clipboard
   -- In order to not clobber system-wide clipboard, easy-to-use keymaps instead of
   -- vim.o.clipboard = 'unnamedplus'
+  -- Uses OSC52 for copy, in order to ease copying inside ssh+tmux
+  -- vim.g.clipboard = {
+  --   name = "OSC 52",
+  --   copy = {
+  --     ["+"] = require("vim.ui.clipboard.osc52").copy("+"),
+  --     ["*"] = require("vim.ui.clipboard.osc52").copy("*"),
+  --   },
+  --   paste = {
+  --     ["+"] = require("vim.ui.clipboard.osc52").paste("+"),
+  --     ["*"] = require("vim.ui.clipboard.osc52").paste("*"),
+  --   },
+  -- }
   vim.keymap.set({ "v", "x", "n" }, "<leader>y", '"+y', { noremap = true, silent = true, desc = "Yank to clipboard" })
   vim.keymap.set(
     { "n", "v", "x" },
