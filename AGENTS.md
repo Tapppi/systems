@@ -233,12 +233,12 @@ nix develop
 **Agent sessions that change this repo work in a git worktree, not in the main
 checkout.**
 
-The main checkout is the user's: it is where they run `nix run .#build-switch`,
-where they merge, and where they read the diff before activating. `build-switch`
-builds *whatever is in the working tree*, committed or not, so an agent's
-in-flight edits there land in a live system generation the user never chose to
-activate. With more than one agent session in the repo at once, they also land
-in each other's commits, and the branch stops describing any one piece of work.
+The main checkout is the user's: it is where `nix run .#build-switch` runs,
+where diffs get reviewed, and where activation happens. `build-switch` builds
+*whatever is in the working tree*, committed or not, so an agent's in-flight
+edits there can land in a live system generation nobody chose to activate —
+and with more than one session in the repo at once, their commits land mixed
+into each other's in-progress work.
 
 ```bash
 # Create and enter. The EnterWorktree tool does the same thing and puts it in
@@ -247,11 +247,46 @@ git worktree add .claude/worktrees/<topic> -b agent/<topic>
 
 # Work, build and test there. Commit scoped by path, and verify each commit
 # with `git show --stat HEAD`.
+```
 
-# Land it, from the main checkout.
-git merge --no-ff agent/<topic>
+**Default: stop there and leave the branch for the user to review and merge**
+— this repo carries config for real machines, and review-before-merge plays
+the role a PR would. The one authorized exception is work explicitly set up
+as unattended background work that includes a deploy: the deploy tooling
+reads from main, not a branch, so in that case only, merge the worktree
+branch into main, deploy (`nix run .#build-switch` on darwin,
+`nixos-rebuild switch --flake .#<host> --target-host root@<host>` for a NixOS
+host — see "Building Configurations"), then resume in the worktree — the same
+one or a fresh one — to keep going. This is a statement of current policy,
+not a claim it is pleasant for fast iteration; the ergonomics of that
+exception are an open question tracked in tieto's ikeh follow-ups, not
+settled here.
+
+Either way, land with a rebase rather than a `--no-ff` merge commit — nothing
+here races an external auto-committer for main the way tieto's obsidian-git
+does, so linear history costs nothing:
+
+```bash
+# Reviewed case (the default): the worktree's own commits are already the
+# reviewable units, so keep them — just linearize.
+git -C .claude/worktrees/<topic> rebase main
+git merge --ff-only agent/<topic>
+
+# Background-work exception: nobody reviewed the individual commits, so
+# squash to one first. That keeps history linear while still leaving a
+# single commit as the revert point — the property a --no-ff merge commit
+# would otherwise buy.
+git -C .claude/worktrees/<topic> reset --soft main
+git -C .claude/worktrees/<topic> commit
+git merge --ff-only agent/<topic>
+
 git worktree remove .claude/worktrees/<topic> && git branch -d agent/<topic>
 ```
+
+A subagent that needs its own workspace branches a nested worktree off the
+worktree already in use, not off main — reserve this for work big enough that
+the existing parallel-work conventions, without a nested worktree, stop being
+enough.
 
 A worktree is a full checkout with its own index, so `nix build`,
 `nix flake check`, `nix eval` and the VM tests all work inside one exactly as
