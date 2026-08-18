@@ -36,8 +36,11 @@ TMP="$OUT.tmp"
 # An aborted run must not leave a partial file behind for the next one
 # to carry forward.
 trap 'rm -f "$TMP"' EXIT
-# Six calls per run, so the per-call ceiling has to leave the whole run
-# inside the unit's TimeoutStartSec and the timer interval.
+# Three calls per queue, so the run's worst case is 3 x TIMEOUT x the queue
+# count and it has to stay inside the unit's TimeoutStartSec and the timer
+# interval. Every call is loopback and answers in milliseconds; the ceiling
+# exists for a frontend that has stopped answering, and a run that hits it is
+# a run whose gauges were going to be wrong anyway.
 TIMEOUT=${TEMPORAL_HTTP_TIMEOUT:-3}
 
 ok=1

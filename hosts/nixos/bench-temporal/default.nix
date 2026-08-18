@@ -32,6 +32,40 @@ let
     port: 8080
     enableUi: true
   '';
+
+  # Which cache profile the dynamic config below renders. It has to match
+  # `limits.memory` on the Incus side, and the two are set in different places,
+  # so changing one without the other is the failure mode to watch for.
+  #   roomy — caps of 1 GiB and up, including this guest's deployed 1536 MiB
+  #   tight — the 512 MiB cap
+  cacheProfile = "roomy";
+  profiles = {
+    roomy = {
+      historyCacheEntries = 1024;
+      historyCacheTTL = "10m";
+      eventsCacheBytes = 33554432; # 32 MiB
+      eventsCacheTTL = "5m";
+      schedulerWorkers = 32;
+      memoryTimerWorkers = 8;
+      pendingTasksMax = 1000;
+      pendingTasksCritical = 800;
+      mutableStateError = 2097152; # 2 MiB
+      mutableStateWarn = 524288; # 512 KiB
+    };
+    tight = {
+      historyCacheEntries = 256;
+      historyCacheTTL = "5m";
+      eventsCacheBytes = 8388608; # 8 MiB
+      eventsCacheTTL = "2m";
+      schedulerWorkers = 12;
+      memoryTimerWorkers = 4;
+      pendingTasksMax = 250;
+      pendingTasksCritical = 200;
+      mutableStateError = 1048576; # 1 MiB
+      mutableStateWarn = 262144; # 256 KiB
+    };
+  };
+  c = profiles.${cacheProfile};
 in
 {
   imports = [ ../../../modules/nixos/bench/guest-base.nix ];
@@ -88,12 +122,130 @@ in
       };
       dcRedirectionPolicy.policy = "noop";
       dynamicConfigClient = {
-        filepath = "/var/lib/temporal/dynamicconfig.yaml";
+        filepath = "/etc/temporal/dynamicconfig.yaml";
+        # The server refuses to start below 5 s. Only the scheduler pools and
+        # the queue budgets below are re-read on a poll; everything cache-shaped
+        # is read once at process start, so an edit to those needs a restart.
         pollInterval = "60s";
       };
       publicClient.hostPort = "127.0.0.1:7233";
     };
   };
+
+  # Dynamic config. Temporal's defaults size every cache for a machine far
+  # larger than a memory-capped guest: the mutable-state cache holds 128000
+  # entries with an 8 MiB per-entry ceiling, the events cache is per shard and
+  # so exists 64 times over, every cache is TTL-based with no proactive
+  # eviction, and the scheduler pools spawn 1600 goroutines before any work
+  # arrives. Nothing warns about this and there is no memory equivalent of
+  # Go 1.25's container-aware GOMAXPROCS, so a capped process gets no
+  # backpressure of its own either — GOMEMLIMIT is set beside the cap, on the
+  # Incus side, because its value tracks the cap. Deliberately NOT set as a
+  # unit `environment.GOMEMLIMIT` here: a unit-level Environment= would win
+  # over the manager environment and pin every cap to one value.
+  #
+  # Two hazards this file is shaped around:
+  #   - history.cacheSizeBasedLimit must stay false. With size-based limiting
+  #     on, the cache release path iterates an unlocked map and Go raises
+  #     "concurrent map iteration and map write", which recover() cannot catch
+  #     (temporalio/temporal#10548). Entry-count mode is the only safe mode.
+  #   - An unregistered key is silently ignored with a single log line, so a
+  #     typo reads exactly like a setting that did not help. Every key here is
+  #     checked against v1.31.2's common/dynamicconfig/constants.go, and
+  #     `journalctl -u temporal | grep -i "unregistered\|unknown key"` after a
+  #     deploy is the only signal that they were accepted.
+  #
+  # Byte-denominated limits are budgeted as if several times larger than they
+  # read: the accounting uses protobuf wire size, not unmarshalled heap size
+  # (temporalio/temporal#10523).
+  environment.etc."temporal/dynamicconfig.yaml".text = ''
+    # Mutable-state cache — process-global, not per shard.
+    history.cacheSizeBasedLimit:
+      - value: false
+        constraints: {}
+    history.hostLevelCacheMaxSize:
+      - value: ${toString c.historyCacheEntries}
+        constraints: {}
+    history.cacheTTL:
+      - value: "${c.historyCacheTTL}"
+        constraints: {}
+    history.cacheBackgroundEvict:
+      - value: { Enabled: true, LoopInterval: "30s", MaxEntryPerCall: 1024 }
+        constraints: {}
+
+    # Events cache — per shard by default, so 64 independent caches. One
+    # host-level cache instead, which stops the cost scaling with shard count.
+    history.enableHostLevelEventsCache:
+      - value: true
+        constraints: {}
+    history.eventsHostLevelCacheMaxSizeBytes:
+      - value: ${toString c.eventsCacheBytes}
+        constraints: {}
+    history.eventsCacheTTL:
+      - value: "${c.eventsCacheTTL}"
+        constraints: {}
+
+    # Cross-cluster blob cache. This is a single-cluster deployment, so it
+    # holds nothing useful.
+    history.xdcCacheMaxSizeBytes:
+      - value: 1048576
+        constraints: {}
+
+    # Host-level scheduler pools, independent of shard count and re-read on
+    # the poll interval.
+    history.transferProcessorSchedulerWorkerCount:
+      - value: ${toString c.schedulerWorkers}
+        constraints: {}
+    history.timerProcessorSchedulerWorkerCount:
+      - value: ${toString c.schedulerWorkers}
+        constraints: {}
+    history.visibilityProcessorSchedulerWorkerCount:
+      - value: ${toString c.schedulerWorkers}
+        constraints: {}
+    history.memoryTimerProcessorSchedulerWorkerCount:
+      - value: ${toString c.memoryTimerWorkers}
+        constraints: {}
+
+    # In-memory task budget, per shard per queue category — so x64 x4. The
+    # critical count has to stay below the max count.
+    history.queuePendingTasksMaxCount:
+      - value: ${toString c.pendingTasksMax}
+        constraints: {}
+    history.queuePendingTaskCriticalCount:
+      - value: ${toString c.pendingTasksCritical}
+        constraints: {}
+
+    # Matching. Each partition is a separately loaded manager with its own
+    # backlog buffer, and four of them buy nothing at bench scale.
+    # matching.maxTaskQueueIdleTime stays at its 5 m default because it must
+    # exceed matching.getUserDataLongPollTimeout, which is 4 m 50 s.
+    matching.numTaskqueueReadPartitions:
+      - value: 1
+        constraints: {}
+    matching.numTaskqueueWritePartitions:
+      - value: 1
+        constraints: {}
+    matching.getTasksBatchSize:
+      - value: 100
+        constraints: {}
+
+    # Per-entry ceilings — the only thing bounding what one cached workflow
+    # can cost.
+    limit.mutableStateSize.error:
+      - value: ${toString c.mutableStateError}
+        constraints: {}
+    limit.mutableStateSize.warn:
+      - value: ${toString c.mutableStateWarn}
+        constraints: {}
+
+    # Background scanners a single-node bench does not need.
+    worker.historyScannerEnabled:
+      - value: false
+        constraints: {}
+    worker.taskQueueScannerEnabled:
+      - value: false
+        constraints: {}
+  '';
 
   # Render the real config (password substituted) into the state dir and
   # point the server at it. EnvironmentFile is read by the manager as root,
@@ -111,7 +263,10 @@ in
     };
     preStart = ''
       mkdir -p /var/lib/temporal/config
-      [ -f /var/lib/temporal/dynamicconfig.yaml ] || echo '{}' > /var/lib/temporal/dynamicconfig.yaml
+      # The dynamic config the server reads is /etc/temporal/dynamicconfig.yaml.
+      # A second file of that name in the state dir would be the one an operator
+      # finds by looking, so the state dir does not carry one.
+      rm -f /var/lib/temporal/dynamicconfig.yaml
       sed "s|@SQL_PASSWORD@|$SQL_PASSWORD|g" \
         /etc/temporal/temporal-server.yaml > /var/lib/temporal/config/temporal-server.yaml
       chmod 600 /var/lib/temporal/config/temporal-server.yaml
@@ -189,7 +344,11 @@ in
       CURL = "${pkgs.curl}/bin/curl";
       JQ = "${pkgs.jq}/bin/jq";
       POLLER_FOOTER = "${../../../modules/nixos/bench/poller-footer.sh}";
-      TEMPORAL_QUEUES = "bench-default bench-gpu compose-temporal compose-temporal-gpu load-temporal";
+      # Hand-kept: nothing enumerates declared task queues, and a queue absent
+      # from this list has no backlog series at all — which on a dashboard is
+      # indistinguishable from an engine that never queued anything.
+      TEMPORAL_QUEUES = "bench-default bench-gpu compose-temporal compose-temporal-gpu"
+        + " load-temporal load-sleep";
     };
     script = "exec ${pkgs.bash}/bin/bash ${./temporal-queue-metrics.sh}";
   };

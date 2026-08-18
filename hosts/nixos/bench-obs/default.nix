@@ -169,7 +169,8 @@ in
       HATCHET_API_URL = "http://dogmatix:8888";
       OUT = "/var/lib/node-exporter-textfile/hatchet.prom";
       HATCHET_QUEUES = "bench-noop bench-gpu bench-hitl bench-cron bench-burst"
-        + " compose-hatchet compose-hatchet-loop compose-hatchet-turn";
+        + " compose-hatchet compose-hatchet-loop compose-hatchet-turn"
+        + " load-noop load-sleep";
     };
     script = "exec ${pkgs.python3}/bin/python3 ${./hatchet-queue-metrics.py}";
   };
