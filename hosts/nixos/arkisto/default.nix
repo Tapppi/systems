@@ -13,7 +13,14 @@
 # destroys, with nothing to distinguish the two states from inside.
 #
 #   /data/agent-sessions/<hostname>/claude/   per-Mac session mirrors
-#   /data/host-data/tmopro18/                 evacuated host data
+#   /data/host-data/<hostname>/               data evacuated from a machine
+#   /data/sources/<service>/                  non-host origins (Dropbox, …)
+#   /data/inventories/<date>/                 inventory reports themselves
+#
+# The namespace records where data was *obtained*, not who nominally owns it:
+# a stale Dropbox folder found on a Mac's disk belongs under that host, not
+# under sources/dropbox, which is reserved for an export pulled from the
+# account itself.
 #
 # Join to the tailnet once by hand, as a tagged resource:
 #   incus exec arkisto -- tailscale up --authkey <key> --advertise-tags=tag:backup
@@ -80,5 +87,7 @@ in
     "d /data 0750 sync sync -"
     "d /data/agent-sessions 0750 sync sync -"
     "d /data/host-data 0750 sync sync -"
+    "d /data/sources 0750 sync sync -"
+    "d /data/inventories 0750 sync sync -"
   ];
 }
