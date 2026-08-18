@@ -147,6 +147,19 @@ in
     # round-tripping every path via this Mac.
     builders-use-substitutes = true
 
+    # The t2linux kernel automatix needs (modules/nixos/automatix/t2.nix). It
+    # is not in cache.nixos.org, and building it from source is hours on the
+    # Rosetta builder.
+    #
+    # It has to live here rather than being passed as `--extra-substituters`
+    # on the command line: this Mac's `trusted-users` is root only, so the
+    # daemon accepts that flag from the CLI and then silently ignores it —
+    # `nix config show` reports the substituter as active while substitution
+    # quietly falls back to building. The failure looks like an unexplained
+    # multi-hour compile rather than an error.
+    extra-substituters = https://cache.soopy.moe
+    extra-trusted-public-keys = cache.soopy.moe-1:0RZVsQeR+GOh0VQI9rvnHz55nVXkFardDqfm4+afjPo=
+
     # Disk-pressure GC: collect once free space drops below min-free, freeing up
     # to max-free. Removes only unreachable paths; old profile generations are
     # GC roots, so the scheduled nix-collect-garbage below still prunes those.
