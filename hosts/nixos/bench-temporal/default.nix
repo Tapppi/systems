@@ -39,6 +39,30 @@ let
   #   roomy — caps of 1 GiB and up, including this guest's deployed 1536 MiB
   #   tight — the 512 MiB cap
   cacheProfile = "roomy";
+
+  # Go's heap ceiling, and the GC aggressiveness that goes with it. Both track
+  # `limits.memory` on the Incus side and are set here rather than there:
+  # `incus config set … environment.GOMEMLIMIT=…` reaches the container's PID 1
+  # and stops, because a service inherits systemd's *manager* environment and
+  # not the environment systemd itself was exec'd with. The variable is then
+  # present in /proc/1/environ and absent from the server process, which reads
+  # exactly like a setting that did not help.
+  #
+  # Go 1.25 made GOMAXPROCS container-aware and there is still no memory
+  # equivalent (golang/go#75164), so without this a capped guest gets no
+  # backpressure at all. It is a backstop and not the fix: below a program's
+  # true live-heap floor Go caps collection at ~50 % of CPU and lets memory
+  # exceed the limit anyway. The cache bounds below are the fix.
+  #
+  # The cost of setting it here is one rebuild per RAM step. The headroom
+  # fraction widens as the cap shrinks, because the fixed non-heap resident set
+  # is a larger share of a smaller cap:
+  #   2 GiB -> 1800MiB, GOGC default
+  #   1 GiB ->  880MiB, GOGC default
+  #   512 MiB -> 410MiB, GOGC 50   (with cacheProfile = "tight")
+  goMemLimit = "1800MiB";
+  goGC = null;
+
   profiles = {
     roomy = {
       historyCacheEntries = 1024;
@@ -252,6 +276,9 @@ in
   # so DynamicUser still gets the variables.
   systemd.services.temporal = {
     path = [ pkgs.gnused pkgs.coreutils ];
+    environment = { GOMEMLIMIT = goMemLimit; } // lib.optionalAttrs (goGC != null) {
+      GOGC = toString goGC;
+    };
     serviceConfig = {
       EnvironmentFile = "/root/bench-secrets.env";
       # --allow-no-auth is deliberate and load-bearing. The bench runs no
