@@ -5,9 +5,14 @@
 #   incus launch images:nixos/unstable <name> -p default -p <guest-profile>
 # The guest profile carries the /dev/net/tun device Tailscale needs; what else
 # it carries differs per guest family (see the modules that import this).
-# Deploy/update by pushing this repo into the guest and running
-#   nixos-rebuild switch --flake /root/systems#<name>
-# (or nixos-rebuild --target-host over the tailnet once the guest is joined).
+# Deploy from asterix once the guest has joined the tailnet:
+#   nix run nixpkgs#nixos-rebuild -- switch --flake .#<name> \
+#     --target-host root@<name>
+# The build runs on asterix, with x86_64-linux delegated to the rosetta
+# builder that advertises it, and only the closure crosses to the guest.
+# Building inside the guest instead makes its RAM the ceiling on what can be
+# built there: these containers are sized for what they run, not for compiling
+# it, and dogmatix has no swap to absorb the difference.
 # Keep these modules plain — no option abstractions.
 { config, ... }:
 
