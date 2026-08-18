@@ -41,7 +41,18 @@
     # USB dongle on a machine with no other network path, and wifi is the only
     # fallback that does not require standing at it.
     firmware.enable = true;
-    firmware.version = "sonoma";
+
+    # ventura, not the module's `sonoma` default, and this is load-bearing
+    # rather than a preference. Against the sonoma image, nixos-hardware's
+    # `get-wifi` extractor dies on `assert not props` — the plist carries
+    # properties it does not expect — and the build VM then panics when its
+    # init exits. That failure is not local to the firmware: it takes the
+    # whole system closure with it, so the host will not build at all.
+    #
+    # ventura yields the complete set for this machine — BCM4364 rev B2 on
+    # board `ekans`, including the .bin, .clm_blob, .txcap_blob and the
+    # per-region HRPN tables.
+    firmware.version = "ventura";
   };
 
   # Without this the patched kernel is compiled from source, which is hours on
