@@ -234,11 +234,23 @@
           specialArgs = inputs // { inherit inputs; };
           modules = [ ./modules/nixos/installer ];
         };
+
+        # The same installer plus the patched t2linux kernel, for Apple T2
+        # Macs whose internal keyboard a stock kernel cannot see. Separate
+        # artifact so that onboarding any other host does not depend on a
+        # third-party binary cache — see modules/nixos/installer/t2.nix.
+        konehuone-installer-t2 = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = inputs // { inherit inputs; };
+          modules = [ ./modules/nixos/installer/t2.nix ];
+        };
       };
 
       # Buildable artifacts. The installer ISO needs an x86_64-linux + kvm
       # builder (the Mac's rosetta builder, or dogmatix once up).
       packages.x86_64-linux.konehuone-installer-iso =
         self.nixosConfigurations.konehuone-installer.config.system.build.isoImage;
+      packages.x86_64-linux.konehuone-installer-t2-iso =
+        self.nixosConfigurations.konehuone-installer-t2.config.system.build.isoImage;
   };
 }
