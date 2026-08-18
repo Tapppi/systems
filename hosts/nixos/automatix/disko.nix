@@ -28,6 +28,19 @@
 # harness rewrites every device to /dev/vdX, so a wrong path passes the VM test
 # and then wipes nothing, or the wrong thing, on the real machine.
 #
+# ⚠️ THE VM TEST CANNOT RUN THIS LAYOUT AT THESE SIZES. disko's harness hard-
+# codes `emptyDiskImages = genList (_: 4096)` — one 4 GiB disk, whatever the
+# config declares — so a 2 GiB ESP plus 8 GiB of swap does not fit, and the
+# run fails at `Unable to set partition 2's name to 'disk-main-swap'` rather
+# than at anything wrong with the config. To exercise it:
+#
+#   nix build .#nixosConfigurations.automatix.config.system.build.installTest
+#
+# with the ESP and swap temporarily shrunk to 512M. That validates what
+# actually carries risk — GPT type codes, btrfs subvolume creation, mount and
+# unmount idempotency, destroy-and-recreate, and the bootloader install under
+# OVMF — none of which depends on the sizes.
+#
 # by-id rather than /dev/nvme0n1 because the failure mode that matters is
 # "wiped the wrong disk", and a name derived from the disk's own serial is the
 # one that guards against it. Note `device` is only used for the create step —
