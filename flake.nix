@@ -29,6 +29,14 @@
       url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # Apple T2 support for automatix, via nixosModules.apple-t2: the patched
+    # t2linux kernel that drives the internal keyboard, trackpad and audio, and
+    # a derivation that extracts Broadcom wifi firmware from an Apple recovery
+    # image so the host needs no surviving macOS install.
+    nixos-hardware = {
+      url = "github:NixOS/nixos-hardware";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     # nixCats declares no inputs of its own — it takes pkgs from the caller — so
     # it gets no `inputs.nixpkgs.follows`. Adding one is a no-op override and
     # makes Nix warn on every evaluation. The nixpkgs pin that matters for the
@@ -48,7 +56,7 @@
     };
   };
 
-  outputs = { self, darwin, nix-homebrew, homebrew-bundle, homebrew-core, homebrew-cask, home-manager, nixpkgs, disko, nixCats, nvim, nix-rosetta-builder } @inputs:
+  outputs = { self, darwin, nix-homebrew, homebrew-bundle, homebrew-core, homebrew-cask, home-manager, nixpkgs, disko, nixCats, nvim, nix-rosetta-builder, nixos-hardware } @inputs:
     let
       user = "tapani";
       linuxSystems = [ "x86_64-linux" "aarch64-linux" ];
@@ -153,6 +161,32 @@
           system = "x86_64-linux";
           specialArgs = inputs // { inherit inputs; };
           modules = [ ./hosts/nixos/dogmatix ];
+        };
+
+        # automatix — the 2018 MacBook Pro, an Apple T2 machine, run headless
+        # as the fleet's x86_64-linux builder and media host. The only host
+        # here that uses disko: nixos-anywhere requires it, and ADR-001 makes
+        # nixos-anywhere the onboarding path. See hosts/nixos/automatix.
+        automatix = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = inputs // { inherit inputs; };
+          modules = [
+            # Supplies system.build.diskoScript, which nixos-anywhere runs to
+            # partition, and system.build.installTest, which is what
+            # `nixos-anywhere --vm-test` builds.
+            disko.nixosModules.disko
+            ./hosts/nixos/automatix
+          ];
+        };
+
+        # The speech guest: Kokoro-82M behind the OpenAI /v1/audio/speech
+        # contract for the vault's aloud-tts plugin, as a digest-pinned OCI
+        # image under podman. Same imperative lifecycle as the other guests,
+        # plus the podman-guest Incus profile — see hosts/nixos/tts.
+        tts = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = inputs // { inherit inputs; };
+          modules = [ ./hosts/nixos/tts ];
         };
 
         # The archive guest: agent session transcripts mirrored off the Macs
