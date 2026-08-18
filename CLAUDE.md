@@ -158,15 +158,13 @@ activate, or how to apply a change just made, give them that one command, and
 name only that command: telling them to run `darwin-rebuild` directly bypasses
 the wrapper's host resolution and its sudo handling.
 
-**There is no `nix run .#` path for NixOS hosts, and `apps/<linux>/build-switch`
-must not be used.** It is the upstream starter's: it resolves the target from
-`uname -m` and switches to `nixosConfigurations.<arch>`, the untested
-placeholder, rather than to a hostname-keyed host like `dogmatix`. That
-placeholder's `keys` list is empty, so activating it would leave a host with no
-authorized SSH keys. It is currently non-executable, which is the only reason
-that has not happened. Real NixOS deploys are push-based (HLB-9) via remote
-`nixos-rebuild` as above; new hosts are onboarded with `nixos-anywhere` per
-ADR-001.
+**There is no `nix run .#` path for NixOS hosts.** `apps/<linux>/build-switch`
+is the upstream starter's placeholder — it switches to
+`nixosConfigurations.<arch>`, whose `keys` list is empty, so activating it
+would strand a host with no authorized SSH keys. Deploy hosts with the
+`nixos-rebuild --target-host` line above, and run
+`scripts/deploy-preflight.sh <host>` first. New hosts are onboarded with
+`nixos-anywhere` per ADR-001.
 
 `darwinConfigurations` contains hostname-keyed entries only. The upstream
 starter's per-architecture placeholder is no longer instantiated — see
@@ -231,81 +229,30 @@ nix develop
 ### Agent worktrees
 
 **Agent sessions that change this repo work in a git worktree, not in the main
-checkout.**
-
-The main checkout is the user's: it is where `nix run .#build-switch` runs,
-where diffs get reviewed, and where activation happens. `build-switch` builds
-*whatever is in the working tree*, committed or not, so an agent's in-flight
-edits there can land in a live system generation nobody chose to activate —
-and with more than one session in the repo at once, their commits land mixed
-into each other's in-progress work.
+checkout.** The main checkout is where activation happens, and
+`nix run .#build-switch` builds whatever is in the working tree, committed or
+not — so in-flight agent edits there can reach a live system generation nobody
+chose to activate.
 
 ```bash
-# Create and enter. The EnterWorktree tool does the same thing and puts it in
-# the same place; `.claude/worktrees/` is gitignored.
 git worktree add .claude/worktrees/<topic> -b agent/<topic>
-
-# Work, build and test there. Commit scoped by path, and verify each commit
-# with `git show --stat HEAD`.
 ```
 
-**Default: stop there and leave the branch for the user to review and merge**
-— this repo carries config for real machines, and review-before-merge plays
-the role a PR would. The one authorized exception is work explicitly set up
-as unattended background work that includes a deploy: the deploy tooling
-reads from main, not a branch, so in that case only, merge the worktree
-branch into main, deploy (`nix run .#build-switch` on darwin,
-`nixos-rebuild switch --flake .#<host> --target-host root@<host>` for a NixOS
-host — see "Building Configurations"), then resume in the worktree — the same
-one or a fresh one — to keep going. This is a statement of current policy,
-not a claim it is pleasant for fast iteration; the ergonomics of that
-exception are an open question tracked in tieto's ikeh follow-ups, not
-settled here.
+Never commit to `main`. Never `git add -A` / `git add .` / bare `git commit` —
+always `git commit -- <explicit paths>`, verified with `git show --stat HEAD`.
+Never merge your own branch: push it and open a PR (`gh pr create --fill`),
+then stop. Never activate anything on the user's behalf.
 
-Either way, land with a rebase rather than a `--no-ff` merge commit — nothing
-here races an external auto-committer for main the way tieto's obsidian-git
-does, so linear history costs nothing:
+Deploys do **not** require merging to `main` — a NixOS host deploys straight
+from the worktree — but every deploy runs `scripts/deploy-preflight.sh <host>`
+first, which refuses when the target already runs a closure this branch does
+not contain. New files must be `git add`ed or nix cannot see them.
 
-```bash
-# Reviewed case (the default): the worktree's own commits are already the
-# reviewable units, so keep them — just linearize.
-git -C .claude/worktrees/<topic> rebase main
-git merge --ff-only agent/<topic>
+**Load the `worktrees` skill for the full flow** — before creating a worktree
+or branch, before any merge, push or PR, and before any deploy.
 
-# Background-work exception: nobody reviewed the individual commits, so
-# squash to one first. That keeps history linear while still leaving a
-# single commit as the revert point — the property a --no-ff merge commit
-# would otherwise buy.
-git -C .claude/worktrees/<topic> reset --soft main
-git -C .claude/worktrees/<topic> commit
-git merge --ff-only agent/<topic>
-
-git worktree remove .claude/worktrees/<topic> && git branch -d agent/<topic>
-```
-
-A subagent that needs its own workspace branches a nested worktree off the
-worktree already in use, not off main — reserve this for work big enough that
-the existing parallel-work conventions, without a nested worktree, stop being
-enough.
-
-A worktree is a full checkout with its own index, so `nix build`,
-`nix flake check`, `nix eval` and the VM tests all work inside one exactly as
-they do in the main checkout — flake evaluation follows the working directory,
-not the git root. Two things do not move with it:
-
-- **Activation is the main checkout's.** `nix run .#build-switch` from a
-  worktree would activate an unmerged branch. Build and check in the worktree;
-  merge first, then let the user activate.
-- **Remote deploys likewise** — `nixos-rebuild --target-host` pushes a closure
-  built from the working tree to a real machine, so it is subject to the same
-  rule, on top of the "never activate without being asked" one below.
-
-Worktrees live under `.claude/` by convention because that is where the harness
-creates them. A sibling directory outside the repo works equally well.
-
-Small single-file edits made while an operator is watching do not need a
-worktree. Anything long-running, anything backgrounded, and anything that will
-accumulate uncommitted state does.
+Small single-file edits with an operator watching do not need a worktree.
+Anything long-running, backgrounded, or accumulating uncommitted state does.
 
 ### When Making Changes
 
