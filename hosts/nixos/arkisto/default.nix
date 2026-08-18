@@ -33,7 +33,7 @@
 # inside tailscaled and never reaches sshd, so it would hand any ACL-permitted
 # peer a shell straight past the forced command that is the entire restriction
 # on the sync user below.
-{ pkgs, ... }:
+{ pkgs, lib, ... }:
 
 let
   # Public keys of the per-Mac `sync` identities, added as each Mac is
@@ -61,6 +61,73 @@ in
   imports = [ ../../../modules/nixos/lxc-guest.nix ];
 
   networking.hostName = "arkisto";
+
+  # The archive is a sink: data is pushed in and pulled back out, and the guest
+  # itself has no reason to originate a connection to anything. Both directions
+  # are narrowed below so that a compromise here cannot become an exfiltration
+  # path, and so the only way at the data is a credential the owner holds.
+  #
+  # Recovery if this locks the guest out of the tailnet: `incus exec arkisto`
+  # from dogmatix enters the namespace directly and does not traverse the
+  # firewall at all.
+  networking.firewall = {
+    # Nothing on the underlay, so the LAN — dogmatix included — cannot reach
+    # sshd. The shared base opens 22 there and trusts the whole overlay; both
+    # are deliberately dropped, which also closes the node exporter it enables.
+    allowedTCPPorts = lib.mkForce [ ];
+    trustedInterfaces = lib.mkForce [ ];
+    interfaces."tailscale0".allowedTCPPorts = [ 22 ];
+  };
+
+  # `networking.firewall` only filters inbound. Egress needs its own table:
+  # nftables evaluates every chain registered at a hook, so a second table with
+  # a drop policy composes with the firewall's rather than replacing it.
+  networking.nftables.tables.archive-egress = {
+    family = "inet";
+    content = ''
+      chain output {
+        type filter hook output priority filter; policy drop;
+
+        oif "lo" accept
+
+        # Replies to inbound SSH, and the return path of anything accepted
+        # below. Without this the guest could receive but never answer.
+        ct state established,related accept
+
+        # Path MTU discovery and neighbour discovery. Dropping these does not
+        # fail loudly, it strands large packets and reads as a stalled
+        # transfer.
+        meta l4proto { icmp, ipv6-icmp } accept
+
+        # Peers on the overlay are already authenticated by Tailscale, and the
+        # inbound rules decide what they may reach.
+        oifname "tailscale0" accept
+
+        # DHCP keeps eth0 addressed, and losing the lease loses the tailnet
+        # with it.
+        udp dport { 67, 68 } accept
+
+        # The underlay is allowed only what keeps the node reachable at all:
+        # the control plane and DERP over 443, NAT traversal and direct peer
+        # sessions over UDP, and DNS to resolve them.
+        #
+        # 443 is open to any destination, which is the one hole this policy
+        # does not close — it is required for DERP and is also the shape an
+        # exfiltration attempt would take. Scoping it to tailscaled's cgroup
+        # does work (`socket cgroupv2 level 2 "system.slice/tailscaled.service"`)
+        # but is rejected here as too fragile to run unattended: nftables
+        # resolves a cgroup path to an inode at load time, so the rule fails
+        # to load if it is evaluated before tailscaled has started, and
+        # silently stops matching whenever tailscaled restarts under a new
+        # cgroup id. Losing egress that way is indistinguishable from a
+        # network fault. What the rest of the policy buys is that nothing
+        # else gets out: no arbitrary port, no plain HTTP, no substituter
+        # fetch.
+        udp dport { 53, 3478, 41641 } accept
+        tcp dport { 53, 443 } accept
+      }
+    '';
+  };
 
   users.groups.sync.gid = 900;
   users.users.sync = {
