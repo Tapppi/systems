@@ -19,7 +19,7 @@ in-progress work.
 | Never | Instead |
 |---|---|
 | Commit to `main` | Commit to `agent/<topic>` in a worktree |
-| `git add -A`, `git add .`, bare `git commit` | `git commit -- <explicit paths>` |
+| `git add -A` / `.` / `--all` **in the main checkout** | Explicit paths there — other sessions leave work staged. Inside a worktree the index is yours alone and this is unrestricted |
 | Merge your own branch | Push, open a PR, stop |
 | Squash a branch that exists only locally | `--no-ff`, so per-commit history survives |
 | `nix run .#build-switch` | Never, as an agent — it needs interactive sudo. Build only |
@@ -35,8 +35,9 @@ in-progress work.
    git worktree add .claude/worktrees/<topic> -b agent/<topic>
    ```
 
-2. **Work and commit,** scoped by path. After each commit run
-   `git show --stat HEAD` and confirm the file list is exactly yours.
+2. **Work and commit.** The worktree's index is yours alone, so staging is
+   unrestricted here. Still run `git show --stat HEAD` after each commit and
+   confirm the file list is what you meant to change.
 
 3. **Verify — building is always safe, activating never is:**
 
@@ -126,6 +127,15 @@ deploying branch:
 | Ancestor of `main` only | **Rebase** the worktree onto `main`, then retry |
 | Anything else | **Blocked** — another worktree owns this host; resolve with its owner |
 | Unknown or absent | **Blocked** — provenance unverifiable |
+
+A host installed before `system.configurationRevision` was set reports nothing
+and cannot report anything until it has been deployed once from a config that
+sets it. That first deploy is what `PREFLIGHT_ASSUME_UNKNOWN=1` exists for —
+confirm by hand that nothing running on the host matters, then:
+
+```bash
+PREFLIGHT_ASSUME_UNKNOWN=1 scripts/deploy-preflight.sh <host>
+```
 
 This guard serialises hosts by rejection rather than giving them a defined
 source of truth. The convergence-branch design that would replace it is an open

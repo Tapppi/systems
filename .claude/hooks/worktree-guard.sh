@@ -15,8 +15,8 @@ payload=$(cat)
 # No jq means no reliable parse. Allow rather than block the session on it.
 command -v jq >/dev/null 2>&1 || exit 0
 
-cmd=$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null) || exit 0
-[ -n "$cmd" ] || exit 0
+tool=$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null) || exit 0
+cwd=$(printf '%s' "$payload" | jq -r '.cwd // empty' 2>/dev/null)
 
 deny() {
 	jq -nc --arg r "$1" '{
@@ -39,10 +39,37 @@ inform() {
 	exit 0
 }
 
+LANDING_RULES="Worktree conventions (see the 'worktrees' skill for the full flow): commit to agent/<topic>, never to main; verify each commit with 'git show --stat HEAD'; land by pushing and opening a PR with 'gh pr create --fill', then stop and let the user merge. Deploys run from the worktree — no merge needed — but always behind scripts/deploy-preflight.sh. New files must be 'git add'ed or nix cannot see them."
+
+# A linked worktree has its own gitdir; the main checkout's gitdir and common
+# dir are the same path. Detecting it this way rather than by looking for
+# '.claude/worktrees/' in the path keeps the guard correct for worktrees put
+# somewhere else.
+in_worktree() {
+	local gitdir commondir
+	[ -n "$cwd" ] || return 1
+	gitdir=$(git -C "$cwd" rev-parse --git-dir 2>/dev/null) || return 1
+	commondir=$(git -C "$cwd" rev-parse --git-common-dir 2>/dev/null) || return 1
+	[ "$gitdir" != "$commondir" ]
+}
+
+case "$tool" in
+EnterWorktree)
+	inform "$LANDING_RULES"
+	;;
+Bash) ;;
+*)
+	exit 0
+	;;
+esac
+
+cmd=$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)
+[ -n "$cmd" ] || exit 0
+
 # Whole-tree staging. The index is shared with other agent sessions, which
 # routinely leave unrelated work staged.
-if printf '%s' "$cmd" | grep -Eq '\bgit +add +(-A|--all|\.)( |$)'; then
-	deny "This repo forbids whole-tree staging: other sessions leave unrelated work staged, and this would sweep it into your commit. Stage explicit paths, commit with 'git commit -- <paths>', and verify with 'git show --stat HEAD'. See the 'worktrees' skill."
+if printf '%s' "$cmd" | grep -Eq '\bgit +add +(-A|--all|\.)( |$)' && ! in_worktree; then
+	deny "You are in the main checkout, where other sessions routinely leave unrelated work staged — whole-tree staging would sweep it into your commit. Either work in a worktree (git worktree add .claude/worktrees/<topic> -b agent/<topic>), where this is unrestricted, or stage explicit paths and commit with 'git commit -- <paths>'. See the 'worktrees' skill."
 fi
 
 # Local darwin activation. Needs interactive sudo, which no agent has, and
@@ -65,7 +92,7 @@ if printf '%s' "$cmd" | grep -Eq '\bnixos-rebuild\b' &&
 fi
 
 if printf '%s' "$cmd" | grep -Eq '\bgit +worktree +add\b'; then
-	inform "Worktree conventions (see the 'worktrees' skill for the full flow): commit to agent/<topic> with explicit paths, never to main; verify each commit with 'git show --stat HEAD'; land by pushing and opening a PR with 'gh pr create --fill', then stop and let the user merge. Deploys run from the worktree — no merge needed — but always behind scripts/deploy-preflight.sh. New files must be 'git add'ed or nix cannot see them."
+	inform "$LANDING_RULES"
 fi
 
 exit 0

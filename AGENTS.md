@@ -238,10 +238,14 @@ chose to activate.
 git worktree add .claude/worktrees/<topic> -b agent/<topic>
 ```
 
-Never commit to `main`. Never `git add -A` / `git add .` / bare `git commit` —
-always `git commit -- <explicit paths>`, verified with `git show --stat HEAD`.
-Never merge your own branch: push it and open a PR (`gh pr create --fill`),
-then stop. Never activate anything on the user's behalf.
+Never commit to `main`. Never merge your own branch: push it and open a PR
+(`gh pr create --fill`), then stop. Never activate anything on the user's
+behalf.
+
+Whole-tree staging (`git add -A` / `.`) is fine **inside** a worktree, where
+the index is yours alone. In the main checkout it is not — other sessions
+leave work staged there — so commit by explicit path and verify with
+`git show --stat HEAD`.
 
 Deploys do **not** require merging to `main` — a NixOS host deploys straight
 from the worktree — but every deploy runs `scripts/deploy-preflight.sh <host>`
