@@ -226,37 +226,35 @@ nix develop
 
 ## Guidelines for AI Agents
 
-### Agent worktrees
+### Git workflows
 
-**Agent sessions that change this repo work in a git worktree, not in the main
-checkout.** The main checkout is where activation happens, and
-`nix run .#build-switch` builds whatever is in the working tree, committed or
-not — so in-flight agent edits there can reach a live system generation nobody
-chose to activate.
+**Never:**
 
-```bash
-git worktree add .claude/worktrees/<topic> -b agent/<topic>
-```
+- **Commit to `main` without asking.** Small, contained edits are allowed
+  there when the user asks or when you ask first — anything else works in a
+  worktree on `agent/<topic>`.
+- **`git add -A` / `git add .` / `git add --all` in the main checkout.** Other
+  sessions leave work staged there. Inside a worktree the index is yours alone
+  and unrestricted.
+- **Rebase `main` onto a branch.** Branch-onto-`main` is the normal catch-up;
+  the reverse is never correct.
+- **Rewrite pushed history** — force-push, rebase or squash — unless asked.
+  Unpushed work is yours to clean up freely.
+- **Activate macOS configuration.** `nix run .#build-switch` and
+  `darwin-rebuild switch` need interactive sudo this session does not have,
+  and activating is the user's call. Build, then hand over.
+- **Deploy without `scripts/deploy-preflight.sh <host>`,** or past its refusal.
 
-Never commit to `main`. Never merge your own branch: push it and open a PR
-(`gh pr create --fill`), then stop. Never activate anything on the user's
-behalf.
+**Deploying is separate from landing.** A NixOS host deploys straight from the
+worktree branch — nothing needs to reach `main` first — but every deploy runs
+preflight, which refuses when the target already runs a closure this branch
+does not contain. New files must be `git add`ed or nix cannot see them.
 
-Whole-tree staging (`git add -A` / `.`) is fine **inside** a worktree, where
-the index is yours alone. In the main checkout it is not — other sessions
-leave work staged there — so commit by explicit path and verify with
-`git show --stat HEAD`.
-
-Deploys do **not** require merging to `main` — a NixOS host deploys straight
-from the worktree — but every deploy runs `scripts/deploy-preflight.sh <host>`
-first, which refuses when the target already runs a closure this branch does
-not contain. New files must be `git add`ed or nix cannot see them.
-
-**Load the `worktrees` skill for the full flow** — before creating a worktree
-or branch, before any merge, push or PR, and before any deploy.
-
-Small single-file edits with an operator watching do not need a worktree.
-Anything long-running, backgrounded, or accumulating uncommitted state does.
+**Load the `git-workflows` skill** before your first commit on any change that
+is not a single supervised edit, before any push, merge or PR, and before any
+deploy. It carries the four landing flows — PR with user review (the default),
+autonomous PR, local merge, direct on main — each with its own guardrails and
+exceptions, plus the deploy and trap references.
 
 ### When Making Changes
 
