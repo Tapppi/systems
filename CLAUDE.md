@@ -298,3 +298,30 @@ Key points:
 
 - Standalone flake in `flakes/nvim/`
 - Integrated via `modules/shared/nvim/`
+
+## Pushing branches
+
+Pushing an `agent/<topic>` branch to `origin` is pre-approved and runs without a
+prompt, so the worktree flow above does not stop to ask on its way to review:
+
+```bash
+git push -u origin agent/<topic>
+git push --force-with-lease --force-if-includes origin agent/<topic>
+```
+
+The lease stops being pre-approved once the branch's PR carries a review or a
+comment: tidying your own history is fine, rewriting what a reviewer has already
+read is not. It must be paired with `--force-if-includes` — the guard refuses
+a bare lease, because a background fetch refreshes the remote-tracking ref and
+degrades it into a plain force.
+
+Pushing `main` always prompts — as do plain `--force`/`-f`, deletes, a different
+remote, and a bare `git push`. The guard decides *how* you may push, never
+*whether*: it removes a prompt, not the rule that the branch stops for the user to
+review and land.
+
+Enforced by `.claude/hooks/git-push-guard.sh`, registered in `.claude/settings.json`
+along with the allowed prefixes — both committed, so the rule and the permission
+travel with the repo rather than living on one machine. `requireWorktree` is on
+here: a push from the main checkout prompts even for an agent branch, matching the
+worktree rule above.
