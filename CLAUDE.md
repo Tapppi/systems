@@ -316,7 +316,9 @@ a bare lease, because a background fetch refreshes the remote-tracking ref and
 degrades it into a plain force.
 
 Pushing `main` always prompts — as do plain `--force`/`-f`, deletes, a different
-remote, and a bare `git push`. The guard decides *how* you may push, never
+remote, and a bare `git push`. A push routed through `git -C`,
+`--git-dir` or any other global option prompts as well — push from inside the
+worktree rather than reaching into it from elsewhere. The guard decides *how* you may push, never
 *whether*: it removes a prompt, not the rule that the branch stops for the user to
 review and land.
 
