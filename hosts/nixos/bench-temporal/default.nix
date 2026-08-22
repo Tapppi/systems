@@ -57,10 +57,15 @@ let
   # The cost of setting it here is one rebuild per RAM step. The headroom
   # fraction widens as the cap shrinks, because the fixed non-heap resident set
   # is a larger share of a smaller cap:
-  #   2 GiB -> 1800MiB, GOGC default
-  #   1 GiB ->  880MiB, GOGC default
-  #   512 MiB -> 410MiB, GOGC 50   (with cacheProfile = "tight")
-  goMemLimit = "1800MiB";
+  #   2 GiB   -> 1800MiB, GOGC default
+  #   1536 MiB -> 1350MiB, GOGC default   (this guest's deployed cap)
+  #   1 GiB   ->  880MiB, GOGC default
+  #   512 MiB ->  410MiB, GOGC 50         (with cacheProfile = "tight")
+  #
+  # A value above `limits.memory` is worse than no value at all: it reads like
+  # backpressure and provides none, because the cgroup kills the process before
+  # Go ever reaches its own ceiling. This must be moved with the cap.
+  goMemLimit = "1350MiB";
   goGC = null;
 
   profiles = {
