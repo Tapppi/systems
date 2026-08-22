@@ -302,7 +302,7 @@ Key points:
 ## Pushing branches
 
 Pushing an `agent/<topic>` branch to `origin` is pre-approved and runs without a
-prompt, so the worktree flow above does not stop to ask on its way to review:
+prompt, so an agent working on a branch reaches review without stopping to ask:
 
 ```bash
 git push -u origin agent/<topic>
@@ -339,8 +339,8 @@ rule that the branch stops for the user to review and land.
 Enforced by `.claude/hooks/git-push-guard.sh`, registered in `.claude/settings.json`
 along with the allowed prefixes — both committed, so the rule and the permission
 travel with the repo rather than living on one machine. `requireWorktree` is on
-here: a push from the main checkout prompts even for an agent branch, matching the
-worktree rule above. That file also carries an `ask` rule on `main` destinations,
+here: the push must run from a linked worktree, so a push from the main checkout
+prompts even for an `agent/` branch. That file also carries an `ask` rule on `main` destinations,
 so the default branch stays protected even when the hook cannot run — on a machine
 without `jq`, for instance, where the guard prompts and says why rather than going
 quiet.
