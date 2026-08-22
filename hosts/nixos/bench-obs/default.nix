@@ -168,9 +168,12 @@ in
     environment = {
       HATCHET_API_URL = "http://dogmatix:8888";
       OUT = "/var/lib/node-exporter-textfile/hatchet.prom";
+      # Hatchet's queue key is `<workflow>:<step>`, collapsed to one name where
+      # both halves match, so each load task name is its own entry here:
+      # `load-sleep` is W-sleep and `load-sleep-timer` is the durable T-sleep.
       HATCHET_QUEUES = "bench-noop bench-gpu bench-hitl bench-cron bench-burst"
         + " compose-hatchet compose-hatchet-loop compose-hatchet-turn"
-        + " load-noop load-sleep";
+        + " load-noop load-sleep load-sleep-timer";
     };
     script = "exec ${pkgs.python3}/bin/python3 ${./hatchet-queue-metrics.py}";
   };
