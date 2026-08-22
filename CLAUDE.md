@@ -341,5 +341,7 @@ prompts even for an `agent/` branch. That file also carries an `ask` rule on `ma
 the default branch is refused even when the hook does not run at all. That rule
 matches the command text, so it only catches a push that spells `main` out:
 `git push origin HEAD`, a bare `git push`, or `git push origin` with no refspec
-still reach `main` without matching it. The hook catches those; the floor is a
-second line, not an equal one.
+still reach `main` without matching it. The hook catches those; the floor is a second line, not an equal
+one — and not one to reason from. Never plan a push around whether it would
+match the floor: decide by what the guard permits, and if a prompt appears,
+answer it rather than reshaping the command until it stops.
