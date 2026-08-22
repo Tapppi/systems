@@ -310,15 +310,10 @@ git push origin agent/<topic>
 git push --force-with-lease --force-if-includes origin agent/<topic>
 ```
 
-Name the branch every time: a bare `git push` prompts even after `-u` has set
-the upstream, because the guard approves a destination it can read rather than
-one it would have to infer.
-
-The lease stops being pre-approved once the branch's PR carries a review or a
-comment: tidying your own history is fine, rewriting what a reviewer has already
-read is not. It must be paired with `--force-if-includes` — the guard refuses
-a bare lease, because a background fetch refreshes the remote-tracking ref and
-degrades it into a plain force.
+When a rewrite is allowed, why both force flags are mandatory, and the point at
+which a review revokes the pre-approval belong to the branch workflow rather than
+to this guard, and are stated there. What follows is only what the guard itself
+will and will not read.
 
 Everything else prompts, and that is not only `main`: any destination outside the
 `agent/` prefix — `release/1.2`, `hotfix-3`, a topic branch you forgot to prefix —
