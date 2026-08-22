@@ -22,9 +22,16 @@ These have no exceptions. Everything conditional lives in the flow files.
    and staging is unrestricted.
 2. **Never rebase `main` onto a branch.** Branch-onto-`main` is the normal
    catch-up; the reverse rewrites shared history and is never correct.
-3. **Never rewrite history that is already pushed** — no force-push, no
-   rebase, no squash of pushed commits — unless the user or a review asks for
-   it. Before it is pushed, it is yours to clean up freely.
+3. **Never rewrite history someone else may have read.** Before a push, your
+   history is yours to clean up freely. After a push, the line is whether the
+   branch has been *looked at*: tidying your own `agent/` branch that carries
+   no review and no comments is fine and is pre-approved by the push guard;
+   rewriting once a review or comment exists needs the user to ask. Never
+   force-push `main`, and never a plain `--force` — the mandatory form is
+   `--force-with-lease --force-if-includes`
+   ([why](references/flow-pr-review.md#rewriting-a-pushed-branch)).
+   `.claude/hooks/git-push-guard.sh` enforces this, so a prompt here is the
+   rule speaking, not an obstacle to route around.
 4. **Never commit files you did not change.** Check `git show --stat HEAD`
    after every commit.
 5. **Never activate macOS configuration.** `nix run .#build-switch` and

@@ -238,8 +238,11 @@ nix develop
   and unrestricted.
 - **Rebase `main` onto a branch.** Branch-onto-`main` is the normal catch-up;
   the reverse is never correct.
-- **Rewrite pushed history** — force-push, rebase or squash — unless asked.
-  Unpushed work is yours to clean up freely.
+- **Rewrite history someone else may have read.** Tidying your own `agent/`
+  branch before anyone reviews it is fine and is pre-approved; once its PR
+  carries a review or a comment, rewriting needs you to ask. Never force-push
+  `main`, and never a plain `--force` — the form is `--force-with-lease
+  --force-if-includes`.
 - **Activate macOS configuration.** `nix run .#build-switch` and
   `darwin-rebuild switch` need interactive sudo this session does not have,
   and activating is the user's call. Build, then hand over.

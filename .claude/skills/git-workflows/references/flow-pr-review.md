@@ -78,13 +78,35 @@ including inline comments on specific lines, for:
 - **Fixes you made during your own local review**, where knowing you already
   considered something saves the reviewer raising it.
 
-### 6. Stop
+### 6. Rewriting a pushed branch
+
+Between pushing and the first review you may still clean up — that is the
+point of pushing complete turns rather than perfect ones. The form is
+mandatory:
+
+```bash
+git push --force-with-lease --force-if-includes origin agent/<topic>
+```
+
+**Both flags, always.** A bare `--force-with-lease` degrades into a plain
+force the moment a background fetch refreshes the remote-tracking ref, so the
+guard refuses it; `--force-if-includes` is what makes the lease mean what it
+looks like it means. Plain `--force`/`-f` always prompts.
+
+**The pre-approval ends when the PR carries a review or a comment.** Tidying
+your own history is fine; rewriting what a reviewer has already read is not —
+that needs the user to ask for it.
+
+Name the branch explicitly. A bare `git push` prompts even after `-u`, because
+the guard approves a destination it can read rather than one it would infer.
+
+### 7. Stop
 
 The user reviews. They may merge, or ask for changes — including asking for a
 cleaner history, in which case rewriting your own pushed branch is now
 requested and therefore fine.
 
-### 7. Clean up locally, after the merge
+### 8. Clean up locally, after the merge
 
 ```bash
 git worktree remove .claude/worktrees/<topic>
