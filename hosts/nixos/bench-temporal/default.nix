@@ -379,8 +379,13 @@ in
       # Hand-kept: nothing enumerates declared task queues, and a queue absent
       # from this list has no backlog series at all — which on a dashboard is
       # indistinguishable from an engine that never queued anything.
+      #
+      # Names are per-engine and do not carry across: the sleep workload's
+      # Temporal task queue is `load-temporal-sleep`, while `load-sleep` is
+      # Absurd's queue and Hatchet's task name. A name that no Temporal queue
+      # answers to polls clean and publishes nothing.
       TEMPORAL_QUEUES = "bench-default bench-gpu compose-temporal compose-temporal-gpu"
-        + " load-temporal load-sleep";
+        + " load-temporal load-temporal-sleep";
     };
     script = "exec ${pkgs.bash}/bin/bash ${./temporal-queue-metrics.sh}";
   };
