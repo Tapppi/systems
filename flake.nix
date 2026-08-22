@@ -5,6 +5,12 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    # Same channel as `nixpkgs`, locked separately so fast-moving tools can be
+    # refreshed on their own cadence. The main pin stays put because bumping it
+    # rebuilds nvim and the Rosetta builder's guest image; agent tooling like
+    # herdr ships every week or two and is worth updating far more often than
+    # that. Update with `nix flake update nixpkgs-fresh`.
+    nixpkgs-fresh.url = "github:nixos/nixpkgs/nixos-unstable";
     home-manager.url = "github:nix-community/home-manager";
     darwin = {
       url = "github:LnL7/nix-darwin/master";
@@ -56,7 +62,7 @@
     };
   };
 
-  outputs = { self, darwin, nix-homebrew, homebrew-bundle, homebrew-core, homebrew-cask, home-manager, nixpkgs, disko, nixCats, nvim, nix-rosetta-builder, nixos-hardware } @inputs:
+  outputs = { self, darwin, nix-homebrew, homebrew-bundle, homebrew-core, homebrew-cask, home-manager, nixpkgs, nixpkgs-fresh, disko, nixCats, nvim, nix-rosetta-builder, nixos-hardware } @inputs:
     let
       user = "tapani";
       linuxSystems = [ "x86_64-linux" "aarch64-linux" ];

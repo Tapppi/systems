@@ -66,7 +66,10 @@ let
 in
 
 {
-  imports = [ ../../modules/darwin/session-sync.nix ];
+  imports = [
+    ../../modules/darwin/session-sync.nix
+    ../../modules/darwin/herdr.nix
+  ];
 
   environment.systemPackages = [ nvim neovide ];
 
