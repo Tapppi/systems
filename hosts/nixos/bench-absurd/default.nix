@@ -148,34 +148,41 @@ let
     # reads as 0. Task states are zero-filled from a fixed list, so `failed`
     # is a series that exists and reads 0 rather than one that springs into
     # existence on the first failure.
+    # Every identifier built from a queue name is double-quoted. Absurd names
+    # a queue's tables `t_<queue>`/`r_<queue>` verbatim, so a queue whose name
+    # is not a bare SQL identifier — `load-sleep`, which the sleep workload
+    # uses — yields `absurd.r_load-sleep` and a CTE `pend_load-sleep`. Unquoted
+    # those are syntax errors, and the failure is not confined to that queue:
+    # all queues share one statement, so one bad name takes down every Absurd
+    # series at once and `absurd_poller_up` goes to 0.
     ctes= ; body=
     for q in $queues; do
       ctes="''${ctes:+$ctes,}
-        pend_$q as (
+        \"pend_$q\" as (
           select r.available_at
-          from absurd.r_$q r join absurd.t_$q t using (task_id)
+          from absurd.\"r_$q\" r join absurd.\"t_$q\" t using (task_id)
           where t.state in ('pending','sleeping','running')
             and r.state in ('pending','sleeping')
             and r.available_at <= now()),
-        runs_$q as (
+        \"runs_$q\" as (
           select r.started_at, r.claim_expires_at
-          from absurd.r_$q r where r.state = 'running')"
+          from absurd.\"r_$q\" r where r.state = 'running')"
       body="''${body:+$body union all}
         select format('absurd_queue_depth{queue=\"%s\"} %s', '$q',
-          (select count(*) from pend_$q))
+          (select count(*) from \"pend_$q\"))
         union all select format('absurd_queue_oldest_pending_seconds{queue=\"%s\"} %s', '$q',
           (select coalesce(extract(epoch from now() - min(available_at)), 0)::numeric(20,3)
-             from pend_$q))
+             from \"pend_$q\"))
         union all select format('absurd_run_oldest_running_seconds{queue=\"%s\"} %s', '$q',
           (select coalesce(extract(epoch from now() - min(started_at)), 0)::numeric(20,3)
-             from runs_$q))
+             from \"runs_$q\"))
         union all select format('absurd_run_expired_leases{queue=\"%s\"} %s', '$q',
-          (select count(*) from runs_$q where claim_expires_at < now()))
+          (select count(*) from \"runs_$q\" where claim_expires_at < now()))
         union all select format('absurd_tasks{queue=\"%s\",state=\"%s\"} %s', '$q',
           s.state, coalesce(c.n, 0))
           from (values ('pending'),('sleeping'),('running'),
                        ('completed'),('failed'),('cancelled')) as s(state)
-          left join (select state, count(*) n from absurd.t_$q group by state) c
+          left join (select state, count(*) n from absurd.\"t_$q\" group by state) c
             on c.state = s.state"
     done
 
