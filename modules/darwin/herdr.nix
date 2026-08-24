@@ -79,11 +79,15 @@ let
     manifest_check = true
 
     [ui]
+    # TODO: uncomment once herdr is 0.8.2 or newer — check with `herdr --version`
+    # after a `nix flake update nixpkgs-fresh`.
+    #
     # A distinct static shape per agent state rather than one dot recoloured, so
-    # the sidebar stays readable without relying on hue. Needs herdr 0.8.2; the
-    # nixos-unstable channel is still on 0.8.0, where this key parses as unknown
-    # and is ignored, so it takes effect on the flake update that crosses 0.8.2.
-    status_indicators = "symbols"
+    # the sidebar stays readable without relying on hue. The key arrived in
+    # 0.8.2 and the nixos-unstable channel is still on 0.8.0, where herdr not
+    # only ignores it but keeps an unknown-key warning pinned in the corner of
+    # the UI, which is why it is commented rather than left to be ignored.
+    # status_indicators = "symbols"
 
     # Name the detected agent in split pane borders when the pane has no manual
     # name, so a split is identifiable without focusing it.
