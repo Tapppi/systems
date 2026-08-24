@@ -77,6 +77,23 @@ let
     # else, so their working/blocked/idle state is read from these manifests —
     # a stale set is exactly what makes the agents sidebar wrong for those three.
     manifest_check = true
+
+    [ui]
+    # A distinct static shape per agent state rather than one dot recoloured, so
+    # the sidebar stays readable without relying on hue. Needs herdr 0.8.2; the
+    # nixos-unstable channel is still on 0.8.0, where this key parses as unknown
+    # and is ignored, so it takes effect on the flake update that crosses 0.8.2.
+    status_indicators = "symbols"
+
+    # Name the detected agent in split pane borders when the pane has no manual
+    # name, so a split is identifiable without focusing it.
+    show_agent_labels_on_pane_borders = true
+
+    [ui.toast]
+    # Route notifications to the macOS notification centre instead of drawing
+    # them inside herdr, which is the only delivery that is visible when herdr
+    # is not the focused window.
+    delivery = "system"
   '';
 in
 {
