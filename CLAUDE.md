@@ -152,17 +152,13 @@ nix run nixpkgs#nixos-rebuild -- switch --flake .#<host> --target-host root@<hos
 
 **The `nix run nixpkgs#` prefix is not optional on asterix.** `nixos-rebuild`
 ships with NixOS, not with nix-on-macOS, so the bare command is `command not
-found` on the very machine these deploys are run from. Two separate things go
-wrong without it: the tool is absent, and asterix is `aarch64-darwin` while
-every NixOS host here is `x86_64-linux`, so there is nothing local that can
-build the closure either.
+found` on the very machine these deploys are run from.
 
-No `--build-host` is needed anyway: `nix-rosetta-builder` registers an
-`x86_64-linux` machine in `/etc/nix/machines`, so the daemon farms the build
-out on its own and starts the builder on demand. Evaluation stays local, which
-darwin handles fine. If that builder is ever unavailable, `--build-host
-root@<host>` builds on the target instead — correct but slower, and a poor idea
-on a small guest.
+No `--build-host` is needed: asterix is `aarch64-darwin` and the NixOS hosts are
+`x86_64-linux`, so the daemon farms the build out to the Linux builder below.
+Evaluation stays local, which darwin handles fine. If that builder is ever
+unavailable, `--build-host root@<host>` builds on the target instead — correct
+but slower, and a poor idea on a small guest.
 
 **`nix run .#build-switch` is the single user-facing entrypoint for activating
 macOS configuration.** Everything beneath it — `nix build` of
@@ -191,6 +187,21 @@ starter's per-architecture placeholder is no longer instantiated — see
 user's call, not an agent's. Building is not activating: `nix run .#build`,
 `nix build`, `nix eval` and `nix flake check` are all safe and are the way to
 verify a change before proposing it.
+
+### The Linux builder (asterix)
+
+Builds targeting `x86_64-linux` or `aarch64-linux` — every NixOS deploy, the
+installer ISOs — are farmed out to the nix-rosetta-builder VM configured in
+`hosts/darwin-minimal/default.nix`. Only the build crosses; evaluation is local.
+
+**Nothing needs to be done to start it.** It boots when a Linux build reaches
+for it and stops when idle, so a Linux build just works — a little slower
+against a cold VM. `macos-setup` has a `builder {status|up|down}` helper for
+pre-warming or reclaiming the RAM early; the normal path never calls it.
+
+A build that fails with `Cannot build … platform mismatch` caught the VM mid
+re-create, which a nixpkgs bump or a change to the builder's own settings
+triggers. Re-run it.
 
 ### System Configuration vs. Imperative Package Install
 
