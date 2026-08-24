@@ -64,7 +64,13 @@ in
     # it cannot exist.
     checkConfig = "syntax-only";
     globalConfig.scrape_interval = "15s";
-    retentionTime = "30d";
+    # The bench's own measurement windows are the reason this is not the
+    # default 15d or a stock 30d: analysis re-derives figures from retained
+    # TSDB long after a run, and a window that has aged out cannot be
+    # re-measured -- the guests it described are reconfigured or gone. At
+    # ~50 MiB/day observed, 180d is ~9 GiB against the pool's 433 GiB free,
+    # so retention is bounded by the analysis, not by disk.
+    retentionTime = "180d";
     scrapeConfigs = [
       {
         job_name = "node";
