@@ -147,8 +147,22 @@ nix run .#build-switch  # build and activate (prompts for sudo)
 nix run .#rollback      # list generations, pick one, activate it
 
 # NixOS hosts — push-based, run from asterix, keyed by hostname
-nixos-rebuild switch --flake .#<host> --target-host root@<host>
+nix run nixpkgs#nixos-rebuild -- switch --flake .#<host> --target-host root@<host>
 ```
+
+**The `nix run nixpkgs#` prefix is not optional on asterix.** `nixos-rebuild`
+ships with NixOS, not with nix-on-macOS, so the bare command is `command not
+found` on the very machine these deploys are run from. Two separate things go
+wrong without it: the tool is absent, and asterix is `aarch64-darwin` while
+every NixOS host here is `x86_64-linux`, so there is nothing local that can
+build the closure either.
+
+No `--build-host` is needed anyway: `nix-rosetta-builder` registers an
+`x86_64-linux` machine in `/etc/nix/machines`, so the daemon farms the build
+out on its own and starts the builder on demand. Evaluation stays local, which
+darwin handles fine. If that builder is ever unavailable, `--build-host
+root@<host>` builds on the target instead — correct but slower, and a poor idea
+on a small guest.
 
 **`nix run .#build-switch` is the single user-facing entrypoint for activating
 macOS configuration.** Everything beneath it — `nix build` of
