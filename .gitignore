@@ -1,2 +1,18 @@
 .opencode/
-.claude/worktrees/
+
+# Claude Code. Everything under .claude/ is per-machine or per-session state by
+# default — settings.local.json, agent worktrees, handoff scratch — so ignore the
+# directory and allowlist back only the config that is genuinely shared: the
+# committed settings, the hooks those settings register, and repo-scoped
+# skills/agents/commands/plugins.
+/.claude/*
+!/.claude/settings.json
+!/.claude/hooks/
+!/.claude/skills/
+!/.claude/agents/
+!/.claude/commands/
+!/.claude/plugins/
+
+# ...but never a .local. variant, wherever it sits. Those are per-machine
+# overrides by convention, including inside an otherwise-tracked skill.
+/.claude/**/*.local.*
