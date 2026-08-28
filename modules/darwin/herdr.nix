@@ -94,6 +94,13 @@ let
     # Route notifications to the macOS notification centre instead of drawing
     # them inside herdr, which is the only delivery that is visible when herdr
     # is not the focused window.
+    #
+    # "terminal" — hand the sequence to the outer terminal and let it post the
+    # notification — is not an option while herdr runs inside tmux, which is
+    # always, since herdr-win launches it in a tmux window. herdr emits OSC 9
+    # and OSC 99 unwrapped, and tmux forwards neither: it has no OSC 99 case at
+    # all, and its OSC 9 handler returns early on anything that is not 9;4, the
+    # progress bar. Ghostty would render either one; nothing reaches it.
     delivery = "system"
   '';
 in
