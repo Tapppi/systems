@@ -413,3 +413,50 @@ Key points:
 
 - Standalone flake in `flakes/nvim/`
 - Integrated via `modules/shared/nvim/`
+
+## Pushing branches
+
+Pushing an `agent/<topic>` branch to `origin` is pre-approved and runs without a
+prompt, so an agent working on a branch reaches review without stopping to ask:
+
+```bash
+git push -u origin agent/<topic>
+git push origin agent/<topic>
+git push --force-with-lease --force-if-includes origin agent/<topic>
+```
+
+When a rewrite is allowed, why both force flags are mandatory, and the point at
+which a review revokes the pre-approval belong to the branch workflow rather than
+to this guard, and are stated there. What follows is only what the guard itself
+will and will not read.
+
+Everything else prompts, and that is not only `main`: any destination outside the
+`agent/` prefix — `release/1.2`, `hotfix-3`, a topic branch you forgot to prefix —
+prompts too, as do plain `--force`/`-f`, deletes and a different remote. `HEAD` is
+resolved to the branch you are on and judged by that same prefix rule. A push
+routed through `--git-dir`, `--work-tree`, `-c` or another option that redirects
+where it lands always prompts; plain `git -C <path> push` is evaluated exactly like
+a direct push.
+
+The guard reads one unquoted `git push` at a time. Quoting the branch
+(`git push origin "agent/$topic"`) or chaining onto it (`git push … && gh pr create`)
+puts the command past what it will parse, so it prompts instead of pre-approving —
+keep the push on its own line, unquoted, and follow up in a separate command. The
+one exception is `cd <dir> && git push …`, which the guard normalizes and judges as
+the push it is — the approval then covers the whole command, `cd` included.
+
+The guard decides *how* you may push, never *whether*: it removes a prompt, not the
+rule that the branch stops for the user to review and land.
+
+Enforced by `.claude/hooks/git-push-guard.sh`, registered in `.claude/settings.json`
+along with the allowed prefixes — both committed, so the rule and the permission
+travel with the repo rather than living on one machine. `requireWorktree` is on
+here: the push must run from a linked worktree, so a push from the main checkout
+prompts even for an `agent/` branch. That file also carries an `ask` rule on `main` destinations, so a push that names
+the default branch is refused even when the hook does not run at all. That rule
+matches the command text, so it only catches a push that spells `main` out:
+`git push origin HEAD`, a bare `git push`, or `git push origin` with no refspec
+still reach `main` without matching it. The hook catches those; the floor is a second line, not an equal
+one — and not one to reason from. Never plan a push around whether it would
+match the floor: decide by what the guard permits, and if a prompt appears,
+answer it rather than reshaping the command until it stops.
