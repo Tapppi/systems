@@ -127,19 +127,32 @@ M._filters = {}
 
 function M.bindToggle(key, bundleID, layoutFn, opts)
   opts = opts or {}
-  local inputSource = opts.inputSource ~= nil and opts.inputSource or M.fiProg
+  -- Explicit nil test: `a ~= nil and a or default` cannot carry a falsey
+  -- value, so `inputSource = false` silently became M.fiProg and the guards
+  -- below were unreachable.
+  local inputSource = M.fiProg
+  if opts.inputSource ~= nil then
+    inputSource = opts.inputSource
+  end
 
   -- Optional: watch for newly created windows and auto-position them.
+  -- `watching` rather than opts.watchCreate downstream: nameForBundleID returns
+  -- nil for an app LaunchServices has not registered yet, and treating the
+  -- option as proof the filter exists would disable the delayed-positioning
+  -- fallback too, leaving the app never positioned for the whole session.
+  local watching = false
   if opts.watchCreate then
     local appName = hs.application.nameForBundleID(bundleID)
     if appName then
       local wf = hs.window.filter.new(appName)
       wf:subscribe(hs.window.filter.windowCreated, function(win)
-        local screen = M.activeScreen()
-        win:setFrame(layoutFn(screen, win))
+        if layoutFn then
+          win:setFrame(layoutFn(M.activeScreen(), win))
+        end
         win:focus()
       end)
       M._filters[bundleID] = wf
+      watching = true
     end
   end
 
@@ -152,7 +165,7 @@ function M.bindToggle(key, bundleID, layoutFn, opts)
         M.setInputSource(inputSource)
       end
       -- Position the window once the app finishes launching.
-      if layoutFn and not opts.watchCreate then
+      if layoutFn and not watching then
         hs.timer.doAfter(1.5, function()
           local a = hs.application.get(bundleID)
           if not a then
@@ -180,6 +193,11 @@ function M.bindToggle(key, bundleID, layoutFn, opts)
       end
       app:unhide()
       win:focus()
+    else
+      -- allWindows() counts minimized windows but mainWindow() returns nil
+      -- unless one is AXMain, so without this the hotkey did nothing at all
+      -- for an app whose only window is minimized.
+      hs.application.launchOrFocusByBundleID(bundleID)
     end
 
     if inputSource then
