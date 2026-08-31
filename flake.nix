@@ -11,7 +11,14 @@
     # herdr ships every week or two and is worth updating far more often than
     # that. Update with `nix flake update nixpkgs-fresh`.
     nixpkgs-fresh.url = "github:nixos/nixpkgs/nixos-unstable";
-    home-manager.url = "github:nix-community/home-manager";
+    # Must follow nixpkgs: left bare, home-manager pulls a second nixpkgs, and the
+    # two drifted apart in the lock. Evaluating its modules against a different
+    # nixpkgs than the system is built from is the documented cause of the
+    # version-mismatch errors this repo warns about.
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     darwin = {
       url = "github:LnL7/nix-darwin/master";
       inputs.nixpkgs.follows = "nixpkgs";
