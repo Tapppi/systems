@@ -30,9 +30,20 @@ The repository structure is based on [dustinlyons/nixos-config](https://github.c
   - `asterix` (the Apple Silicon Mac) has a working, activated configuration in
     `hosts/darwin-minimal/`. It is deliberately narrow while the migration
     proceeds: the nix-rosetta-builder Linux builder, neovim (built from
-    `flakes/nvim`), neovide wrapped to launch that exact neovim, and the
-    Determinate Nix accommodations. Everything else on that machine is still
-    owned by `macos-setup` — check there before assuming something is managed here.
+    `flakes/nvim`), neovide wrapped to launch that exact neovim, Hammerspoon
+    (application and configuration, see `modules/darwin/hammerspoon/README.md`),
+    and the Determinate Nix accommodations. Everything else on that machine is
+    still owned by `macos-setup` — check there before assuming something is
+    managed here.
+  - **home-manager is wired into this host** as of SYSMI-63, in
+    `hosts/darwin-minimal/default.nix`. It is scoped hard: `useUserPackages`
+    keeps `home.profileDirectory` at `/etc/profiles/per-user` rather than
+    materialising `~/.nix-profile`, and the darwin/xdg files home-manager would
+    otherwise place are suppressed. The host owns `stateVersion`,
+    `users.users.tapani` and the `useGlobalPkgs`/`useUserPackages`/
+    `backupFileExtension` settings; modules under `modules/darwin/` contribute
+    `home.file` entries and nothing else. A module that sets any of the
+    host-wide options will collide with the next one that does.
   - `hosts/darwin/` and `modules/darwin/` are the full-featured upstream
     starter, kept as the worked reference for the macos-setup migration. They
     have never been activated and are deliberately not instantiated in
@@ -138,7 +149,10 @@ architecture. The apps in `apps/<system>/` resolve the hostname themselves via
 `scutil --get LocalHostName`, overridable with `DARWIN_HOST`.
 
 ```bash
-# Check the flake configuration
+# Check the flake configuration. Since SYSMI-63 this is not a no-op: it parses
+# the Hammerspoon Lua with the same Lua 5.4 the app embeds and holds it to
+# stylua.toml. That Lua is symlinked out of the store, so no build can catch a
+# syntax error in it — this check is the only thing that does.
 nix flake check
 
 # macOS (darwin) — asterix
@@ -228,11 +242,24 @@ nix develop
 
 ### Darwin Modules (`modules/darwin/`)
 
+Active on `asterix` — these are imported by `hosts/darwin-minimal/`:
+
+- **session-sync.nix**: launchd agent mirroring `~/.claude/` to the homelab archive
+- **herdr.nix**: the agent multiplexer, plus its generated config
+- **hammerspoon/**: the Hammerspoon application and its configuration. Read its
+  `README.md` before touching it — the config path, the module name the stub
+  requires and the restart-vs-reload branch each prevent a specific failure
+
+Unused upstream starter — imported only by the never-activated `hosts/darwin/`:
+
 - **casks.nix**: Homebrew cask applications
 - **dock/**: macOS Dock configuration
 - **files.nix**: System file management
 - **home-manager.nix**: User-level darwin configuration
 - **packages.nix**: System-level packages
+
+Note `modules/darwin/README.md` documents only the starter set and predates
+every active module above.
 
 ### NixOS Modules (`modules/nixos/`)
 
