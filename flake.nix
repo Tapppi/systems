@@ -147,6 +147,7 @@
           specialArgs = inputs // { inherit inputs; };
           modules = [
             inputs.nix-rosetta-builder.darwinModules.default
+            home-manager.darwinModules.home-manager
             ./hosts/darwin-minimal
           ];
         };

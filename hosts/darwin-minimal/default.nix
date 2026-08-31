@@ -69,6 +69,7 @@ in
   imports = [
     ../../modules/darwin/session-sync.nix
     ../../modules/darwin/herdr.nix
+    ../../modules/darwin/hammerspoon
   ];
 
   environment.systemPackages = [ nvim neovide ];
