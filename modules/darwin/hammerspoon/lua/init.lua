@@ -6,11 +6,11 @@ local whu = require("window-hotkey-utils")
 -- programmatic focus changes from hotkey toggles.
 
 local forceUSApps = {
-	["Ghostty"] = true,
-	["Neovide"] = true,
-	["iTerm2"] = true,
-	["Cursor"] = true,
-	["Obsidian"] = true,
+  ["Ghostty"] = true,
+  ["Neovide"] = true,
+  ["iTerm2"] = true,
+  ["Cursor"] = true,
+  ["Obsidian"] = true,
 }
 
 -- Last non-US layout before forcing kicked in. Never set to US so
@@ -18,18 +18,18 @@ local forceUSApps = {
 local previousSourceID = nil
 
 local function activateUSLayout()
-	local current = hs.keycodes.currentSourceID()
-	if current ~= whu.us then
-		previousSourceID = current
-	end
-	whu.setInputSource(whu.us)
+  local current = hs.keycodes.currentSourceID()
+  if current ~= whu.us then
+    previousSourceID = current
+  end
+  whu.setInputSource(whu.us)
 end
 
 local function restorePreviousLayout()
-	if previousSourceID then
-		whu.setInputSource(previousSourceID)
-		previousSourceID = nil
-	end
+  if previousSourceID then
+    whu.setInputSource(previousSourceID)
+    previousSourceID = nil
+  end
 end
 
 -- Primary: track focus changes on all windows.
@@ -38,32 +38,34 @@ end
 local focusFilter = hs.window.filter.new(nil)
 
 focusFilter:subscribe(hs.window.filter.windowFocused, function(win)
-	local app = win:application()
-	if not app then return end
+  local app = win:application()
+  if not app then
+    return
+  end
 
-	if forceUSApps[app:name()] then
-		activateUSLayout()
-	else
-		restorePreviousLayout()
-	end
+  if forceUSApps[app:name()] then
+    activateUSLayout()
+  else
+    restorePreviousLayout()
+  end
 end)
 
 -- Fallback: restore layout when a forceUS window disappears (hidden,
 -- minimised, closed) and no other window immediately gains focus.
 local forceUSFilter = hs.window.filter.new(false)
 for name in pairs(forceUSApps) do
-	forceUSFilter:setAppFilter(name, {})
+  forceUSFilter:setAppFilter(name, {})
 end
 
 forceUSFilter:subscribe(hs.window.filter.windowNotVisible, function()
-	local focused = hs.window.focusedWindow()
-	if focused then
-		local app = focused:application()
-		if app and forceUSApps[app:name()] then
-			return
-		end
-	end
-	restorePreviousLayout()
+  local focused = hs.window.focusedWindow()
+  if focused then
+    local app = focused:application()
+    if app and forceUSApps[app:name()] then
+      return
+    end
+  end
+  restorePreviousLayout()
 end)
 
 -- ─── Custom layouts ────────────────────────────────────────────────
@@ -71,22 +73,22 @@ end)
 -- Chat: laptop fullscreen when lid open, else right side of active
 -- screen (35% on widescreen, 50% on regular).
 local function chatLayout(screen)
-	local builtIn = whu.builtInScreen()
-	if builtIn then
-		return whu.fullFrame(builtIn)
-	end
-	if whu.isWidescreen(screen) then
-		return whu.rightFrame(screen, 0.35, 3)
-	end
-	return whu.rightFrame(screen, 0.5, 3)
+  local builtIn = whu.builtInScreen()
+  if builtIn then
+    return whu.fullFrame(builtIn)
+  end
+  if whu.isWidescreen(screen) then
+    return whu.rightFrame(screen, 0.35, 3)
+  end
+  return whu.rightFrame(screen, 0.5, 3)
 end
 
 -- ─── App hotkeys ───────────────────────────────────────────────────
 
 -- Ghostty (hyper+s) — US layout via forceUSApps, auto-position new windows
 whu.bindToggle("s", "com.mitchellh.ghostty", whu.sidebar("left", 0.6), {
-	inputSource = whu.us,
-	watchCreate = true,
+  inputSource = whu.us,
+  watchCreate = true,
 })
 
 -- Brave (hyper+b)
@@ -109,7 +111,7 @@ whu.bindToggle("c", "com.apple.iCal", whu.center())
 
 -- Obsidian (hyper+j) — US layout via forceUSApps
 whu.bindToggle("j", "md.obsidian", whu.sidebar("right", 0.4), {
-	inputSource = whu.us,
+  inputSource = whu.us,
 })
 
 -- Spotify (hyper+m)
