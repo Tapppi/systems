@@ -133,6 +133,30 @@
     in
     {
       devShells = forAllSystems devShell;
+
+      # The hand-edited Hammerspoon Lua is symlinked out of the store, so it is
+      # deliberately absent from the system closure and a build can never catch
+      # a syntax error in it — only the generated stub is gated. This is where
+      # that gap is closed: `nix flake check` parses it with the same Lua 5.4
+      # the app embeds, and holds it to the repo's StyLua config.
+      checks = forAllSystems (system:
+        let pkgs = nixpkgs.legacyPackages.${system};
+        in {
+          hammerspoon-lua = pkgs.runCommand "hammerspoon-lua-check"
+            { nativeBuildInputs = [ pkgs.lua5_4 pkgs.stylua ]; } ''
+            cp -r ${./modules/darwin/hammerspoon/lua} lua
+            cp ${./stylua.toml} stylua.toml
+            chmod -R u+w lua
+
+            for f in lua/*.lua; do
+              luac -p "$f"
+            done
+
+            stylua --check lua
+
+            touch "$out"
+          '';
+        });
       apps = nixpkgs.lib.genAttrs linuxSystems mkLinuxApps // nixpkgs.lib.genAttrs darwinSystems mkDarwinApps;
 
       # Keyed by hostname only. The upstream starter's per-architecture entry is
