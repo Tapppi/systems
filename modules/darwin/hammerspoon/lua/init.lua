@@ -35,11 +35,15 @@ end
 -- Primary: track focus changes on all windows.
 -- windowFocused fires for both user-initiated (Cmd+Tab, click) and
 -- programmatic (win:focus(), app:unhide()) focus changes.
--- new(true) is the all-windows constructor. new(nil) copies the DEFAULT
--- filter, which drops ignoreInDefaultFilter apps and non-standard window
--- roles — so focusing one of those never fired windowFocused and the
--- keyboard stayed stuck in the forced US layout.
-local focusFilter = hs.window.filter.new(true)
+-- Left as new(nil) — the default filter — deliberately, pending a test on
+-- the machine. new(nil) drops ignoreInDefaultFilter apps and non-standard
+-- roles, so focusing one of those never fires windowFocused and the layout
+-- can stay stuck in US. But new(true) removes the default filter entirely,
+-- including its visible=true rule, so Spotlight and Notification Center
+-- start firing windowFocused and, not being in forceUSApps, restore Finnish
+-- while a Ghostty session is the working context. That is the more frequent
+-- annoyance of the two, and neither behaviour has been observed here yet.
+local focusFilter = hs.window.filter.new(nil)
 
 focusFilter:subscribe(hs.window.filter.windowFocused, function(win)
   local app = win:application()
