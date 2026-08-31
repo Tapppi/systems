@@ -148,9 +148,10 @@
             cp ${./stylua.toml} stylua.toml
             chmod -R u+w lua
 
-            for f in lua/*.lua; do
-              luac -p "$f"
-            done
+            # find, not lua/*.lua: a flat glob would leave a syntax error in
+            # a subdirectory to be caught only by StyLua's parser, never by
+            # the version-matched Lua this check exists to use.
+            find lua -name '*.lua' -print0 | xargs -0 -n1 luac -p
 
             stylua --check lua
 

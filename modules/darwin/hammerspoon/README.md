@@ -6,7 +6,11 @@ picks a browser *profile* for an opened URL will live.
 ## Status
 
 **Implemented:** the packaged application, the move to `~/.config/hammerspoon`, home-manager placement, the generated
-`init.lua` stub, and the existing hotkeys and layout forcing carried over unchanged.
+`init.lua` stub, and the existing hotkeys and layout forcing.
+
+The Lua was moved byte-for-byte and then changed in two follow-up commits — reformatted for this repo, and corrected
+for four latent bugs. It is *not* unchanged, so it is worth re-reading rather than assuming it behaves exactly as it
+did under `macos-setup`.
 
 **Not yet implemented**, and marked *(planned)* where they appear below: the link router and its
 `hs.urlevent.httpCallback`, the picker, `local.browsers.targets` and its generated `targets.lua`, and the per-profile
@@ -212,6 +216,21 @@ first — not because it overwrites anything nix placed (it restores `~/.hammers
 because a `setup.sh` run would re-arm the fallback, putting a working 2026 config back under the exact path a lost
 `MJConfigFile` silently reaches for.
 
+## `hs.ipc` is a privilege surface
+
+The stub calls `require("hs.ipc")` so activation can reload the config with `hs -c`. That opens a name-based Mach port
+with no authentication beyond the user session, and it was **not open before this module existed** — the CLI has never
+worked on this Mac.
+
+The consequence is worth stating plainly: any process running as this user can then execute arbitrary Lua inside
+Hammerspoon and inherit its Accessibility grant — synthesising keystrokes into any application, reading window
+contents, running shell commands. This workspace runs coding agents as that same user. The TCC and code-signing
+argument above is about what may *install* Hammerspoon; this is about what may *drive* it, and they are unrelated.
+
+It is accepted because the alternative — activation that cannot reload the config it just replaced — is worse, and
+because anything already running as this user can drive the GUI by other means. It is documented because it is a real
+capability change the packaging discussion would otherwise hide.
+
 ## Reloading
 
 The reload watcher must point at `<cfgdir>/lua`, never at `<cfgdir>`. `hs.pathwatcher` resolves symlinks before
@@ -230,7 +249,14 @@ reports success.
 Edits made inside an agent worktree do not hot-reload — `local.hammerspoon.luaDir` defaults to the main checkout, and
 that is correct: the running config should follow the reviewed tree, not a branch.
 
-The consequence is that **activating an unmerged branch needs that option overridden**, because the symlink would
+**Ordinary git operations in the watched tree are deploys.** The watcher fires on any `*.lua` write under `luaDir`, so
+a `git checkout`, `git stash` or rebase in the main checkout moves the running config to whatever that branch holds,
+half a second later. Checking out anything older than the module leaves the symlink dangling and the hotkeys gone,
+announced only by a notification — and recovery is not automatic, because the bare `lua` path has no `.lua` suffix and
+so does not pass the watcher's own filter. This is the cost of live editing from a real checkout, and the main argument
+for pointing `luaDir` at something that is not a branch-switching tree.
+
+The other consequence is that **activating an unmerged branch needs that option overridden**, because the symlink would
 otherwise point at a directory that only exists on the branch. Nix cannot catch this: the path is a plain string with
 no store context, so a missing target builds cleanly and fails only at runtime. Activation therefore checks the
 directory itself and, when it is absent, says so and leaves the running Hammerspoon alone — restarting into a config
