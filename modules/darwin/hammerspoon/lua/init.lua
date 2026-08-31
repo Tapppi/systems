@@ -35,7 +35,11 @@ end
 -- Primary: track focus changes on all windows.
 -- windowFocused fires for both user-initiated (Cmd+Tab, click) and
 -- programmatic (win:focus(), app:unhide()) focus changes.
-local focusFilter = hs.window.filter.new(nil)
+-- new(true) is the all-windows constructor. new(nil) copies the DEFAULT
+-- filter, which drops ignoreInDefaultFilter apps and non-standard window
+-- roles — so focusing one of those never fired windowFocused and the
+-- keyboard stayed stuck in the forced US layout.
+local focusFilter = hs.window.filter.new(true)
 
 focusFilter:subscribe(hs.window.filter.windowFocused, function(win)
   local app = win:application()
