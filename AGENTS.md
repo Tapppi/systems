@@ -44,9 +44,12 @@ The repository structure is based on [dustinlyons/nixos-config](https://github.c
     materialising `~/.nix-profile`, and the darwin/xdg files home-manager would
     otherwise place are suppressed. The host owns `stateVersion`,
     `users.users.tapani` and the `useGlobalPkgs`/`useUserPackages`/
-    `backupFileExtension` settings; modules under `modules/darwin/` contribute
-    `home.file` entries and nothing else. A module that sets any of the
-    host-wide options will collide with the next one that does.
+    `backupFileExtension` settings. A module under `modules/darwin/` may
+    contribute `home.file` entries, but must not set any of those host-wide
+    options — the next module that did would collide with it. Only
+    `hammerspoon/` uses home-manager at all today; `herdr.nix` places its
+    config with its own activation script and `session-sync.nix` contributes a
+    launchd agent.
 
     `home.stateVersion` tracks the **newest supported** release and converges
     with the NixOS hosts — `dogmatix`, `automatix` and the LXC guest base are
@@ -70,8 +73,7 @@ The repository structure is based on [dustinlyons/nixos-config](https://github.c
 .
 ├── apps/           # Nix commands for bootstrapping and building per architecture
 │   ├── aarch64-darwin/
-│   ├── aarch64-linux/
-│   ├── x86_64-darwin/
+│   ├── aarch64-linux/  # symlink to x86_64-linux
 │   └── x86_64-linux/
 ├── flakes/         # Standalone flake configurations
 │   └── nvim/       # Neovim configuration (with its own detailed AGENTS.md file, see "Neovim Configuration" section)
@@ -98,9 +100,12 @@ See `flake.nix` for complete list. The most important ones are:
 ### Supported Systems
 
 - `aarch64-darwin` (Apple Silicon macOS)
-- `x86_64-darwin` (Intel macOS)
 - `aarch64-linux` (ARM Linux)
 - `x86_64-linux` (x86_64 Linux)
+
+`flake.nix` sets `darwinSystems = [ "aarch64-darwin" ]`, so **no `x86_64-darwin`
+output exists** — not a `darwinConfiguration`, not an app, not a devShell — and
+`apps/` has no directory for it.
 
 ### Overlays
 
