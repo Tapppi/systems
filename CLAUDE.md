@@ -44,6 +44,11 @@ The repository structure is based on [dustinlyons/nixos-config](https://github.c
     `backupFileExtension` settings; modules under `modules/darwin/` contribute
     `home.file` entries and nothing else. A module that sets any of the
     host-wide options will collide with the next one that does.
+
+    `home.stateVersion` tracks the **newest supported** release and converges
+    with the NixOS hosts — `dogmatix`, `automatix` and the LXC guest base are
+    all on 26.11, so darwin is too. The starter modules are still on 25.05;
+    importing one without reconciling that will fail evaluation.
   - `hosts/darwin/` and `modules/darwin/` are the full-featured upstream
     starter, kept as the worked reference for the macos-setup migration. They
     have never been activated and are deliberately not instantiated in
