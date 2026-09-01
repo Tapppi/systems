@@ -17,6 +17,7 @@
 
 let
   user = "tapani";
+  home = "/Users/${user}";
 
   # Must match the darwinConfigurations attribute name in flake.nix — the apps
   # in apps/aarch64-darwin/ look the host up by the machine's own name.
@@ -73,6 +74,39 @@ in
   ];
 
   environment.systemPackages = [ nvim neovide ];
+
+  # --- home-manager ---
+  # Host-wide because these are host-wide: an app module setting stateVersion
+  # or users.users would collide the moment a second one did the same, and
+  # both starter modules already pin a different stateVersion. Modules under
+  # modules/darwin/ contribute home.file entries and nothing else.
+  #
+  # Scoped deliberately: useUserPackages keeps home.profileDirectory at
+  # /etc/profiles/per-user rather than materialising ~/.nix-profile, which
+  # does not exist on this machine. The three suppressions below drop files
+  # home-manager would otherwise place on darwin for a config that manages no
+  # packages and no fonts.
+  home-manager = {
+    useGlobalPkgs = true;
+    useUserPackages = true;
+    extraSpecialArgs = { inherit inputs; };
+
+    # Insurance for the first activation. linkGeneration refuses to clobber a
+    # pre-existing unmanaged file and exits non-zero, and the activate script
+    # runs under set -e — which would abort after the system profile has been
+    # set but before /run/current-system is relinked.
+    backupFileExtension = "hm-bak";
+
+    users.${user} = {
+      home.stateVersion = "25.05";
+      targets.darwin.copyApps.enable = false;
+      home.file."Library/Fonts/.home-manager-fonts-version".enable = false;
+      home.file."${home}/.cache/.keep".enable = false;
+      home.file."${home}/.local/state/.keep".enable = false;
+    };
+  };
+
+  users.users.${user}.home = home;
 
   # --- Linux builder ---
 
