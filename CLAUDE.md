@@ -266,9 +266,6 @@ Unused upstream starter — imported only by the never-activated `hosts/darwin/`
 - **home-manager.nix**: User-level darwin configuration
 - **packages.nix**: System-level packages
 
-Note `modules/darwin/README.md` documents only the starter set and predates
-every active module above.
-
 ### NixOS Modules (`modules/nixos/`)
 
 - **disk-config.nix**: Disko (declarative disk-partitioning) disk layout
