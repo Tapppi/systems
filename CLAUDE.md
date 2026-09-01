@@ -270,9 +270,9 @@ Unused upstream starter — imported only by the never-activated `hosts/darwin/`
 
 - **casks.nix**: Homebrew cask applications
 - **dock/**: macOS Dock configuration
-- **files.nix**: System file management
+- **files.nix**: static dotfiles, merged into `home.file` (not system files)
 - **home-manager.nix**: User-level darwin configuration
-- **packages.nix**: System-level packages
+- **packages.nix**: packages for `home.packages` (not `environment.systemPackages`)
 
 ### NixOS Modules (`modules/nixos/`)
 

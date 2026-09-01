@@ -9,9 +9,22 @@ picks a browser *profile* for an opened URL will live.
 `init.lua` stub, and the existing hotkeys and layout forcing.
 
 The Lua was moved byte-for-byte, then reformatted for this repo and corrected for four latent bugs. A fifth fix — the
-focus filter's constructor — was reverted a commit later when a second review found the replacement worse than the
-original, and that question is still open. So it is *not* unchanged: re-read it rather than assuming it behaves as it
+focus filter's constructor — was reverted a commit later and remains open, because the two candidates fail in
+opposite directions: `hs.window.filter.new(nil)` copies the default filter, which never fires for
+`ignoreInDefaultFilter` apps or non-standard window roles, so focusing one can leave the keyboard stuck in the forced
+US layout; `new(true)` drops the default entirely, including its `visible=true` rule, so Spotlight and Notification
+Center begin firing `windowFocused` and — not being in `forceUSApps` — restore Finnish while a terminal session is
+the working context. `new(nil)` is what ships. Neither symptom has been observed on the machine, which is what makes
+it a question rather than a bug. So it is *not* unchanged: re-read it rather than assuming it behaves as it
 did under `macos-setup`.
+
+**Known defects, deliberately left:** the input source is set synchronously right after `win:focus()`, so the async
+`windowFocused` handler never records the previous layout; the layout is also set immediately after
+`launchOrFocusByBundleID`, changing the keyboard under the app still holding focus; the 0.05s retry timer in
+`setInputSource` is unreferenced, so it is both collectable and un-cancellable; `win:setFrame()` runs before
+`app:unhide()` in the toggle path, with unverified effect on a hidden window; and `CustomUserPreferences` is
+write-only, so removing this module leaves `MJConfigFile` behind pointing at a file home-manager has deleted. All are
+tracked in SYSMI-63 — none is a regression from this work, and none is fixed here.
 
 **Not yet implemented**, and marked *(planned)* where they appear below: the link router and its
 `hs.urlevent.httpCallback`, the picker, `local.browsers.targets` and its generated `targets.lua`, and the per-profile
