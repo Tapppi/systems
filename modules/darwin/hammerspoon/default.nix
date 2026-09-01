@@ -150,8 +150,9 @@ in
     system.activationScripts.postActivation.text = lib.mkAfter ''
       echo "configuring Hammerspoon" >&2
 
-      if /bin/ps -o args= -p "$PPID" 2>/dev/null | /usr/bin/grep -q -- ' --dry-run'; then
-        # darwin-rebuild runs activate even for --dry-run.
+      if [ -n "''${DRY_RUN:-}" ] || /bin/ps -o args= -p "$PPID" 2>/dev/null | /usr/bin/grep -q -- ' --dry-run'; then
+        # darwin-rebuild runs activate even for --dry-run. The env check keeps
+        # this in step with home-manager's own guard.
         echo "  hammerspoon: --dry-run; leaving the running instance alone." >&2
       elif [ ! -d ${lib.escapeShellArg luaDir} ]; then
         # nix cannot verify an out-of-store path, and restarting into a
