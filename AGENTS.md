@@ -27,14 +27,17 @@ The repository structure is based on [dustinlyons/nixos-config](https://github.c
 
 - **macOS Configuration**: In progress of being migrated from
   [tapppi/macos-setup](https://github.com/tapppi/macos-setup)
-  - `asterix` (the Apple Silicon Mac) has a working, activated configuration in
+  - `asterix` (the Apple Silicon Mac) has a working configuration in
     `hosts/darwin-minimal/`. It is deliberately narrow while the migration
     proceeds: the nix-rosetta-builder Linux builder, neovim (built from
-    `flakes/nvim`), neovide wrapped to launch that exact neovim, Hammerspoon
-    (application and configuration, see `modules/darwin/hammerspoon/README.md`),
-    and the Determinate Nix accommodations. Everything else on that machine is
-    still owned by `macos-setup` — check there before assuming something is
-    managed here.
+    `flakes/nvim`), neovide wrapped to launch that exact neovim, `herdr` and
+    its config, the `session-sync` launchd agent, Hammerspoon (application and
+    configuration, see `modules/darwin/hammerspoon/README.md`), and the
+    Determinate Nix accommodations. Everything but Hammerspoon has been
+    activated on the machine; Hammerspoon arrives with SYSMI-63 and its first
+    activation is what proves the packaged bundle launches. Everything else on
+    that machine is still owned by `macos-setup` — check there before assuming
+    something is managed here.
   - **home-manager is wired into this host** as of SYSMI-63, in
     `hosts/darwin-minimal/default.nix`. It is scoped hard: `useUserPackages`
     keeps `home.profileDirectory` at `/etc/profiles/per-user` rather than

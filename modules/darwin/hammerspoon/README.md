@@ -8,8 +8,9 @@ picks a browser *profile* for an opened URL will live.
 **Implemented:** the packaged application, the move to `~/.config/hammerspoon`, home-manager placement, the generated
 `init.lua` stub, and the existing hotkeys and layout forcing.
 
-The Lua was moved byte-for-byte and then changed in two follow-up commits — reformatted for this repo, and corrected
-for four latent bugs. It is *not* unchanged, so it is worth re-reading rather than assuming it behaves exactly as it
+The Lua was moved byte-for-byte, then reformatted for this repo and corrected for four latent bugs. A fifth fix — the
+focus filter's constructor — was reverted a commit later when a second review found the replacement worse than the
+original, and that question is still open. So it is *not* unchanged: re-read it rather than assuming it behaves as it
 did under `macos-setup`.
 
 **Not yet implemented**, and marked *(planned)* where they appear below: the link router and its
@@ -132,8 +133,9 @@ problem. We do not use it: it sits outside the repo, so nothing in git would des
 
 `configdir/?.lua` is a *template*, and Lua rewrites dots in a module name to `/`, so **`lua/` already works with no
 change**: `require("lua.router")` resolves to `configdir/lua/router.lua`. What `lua/` is not is a path *root* — a bare
-`require("router")` will not find it. The stub prepends `configdir/lua/?.lua` so the modules can require each other by
-bare name; that is readability, not a precondition.
+`require("router")` will not find it. The stub prepends both `configdir/lua/?.lua` and `configdir/lua/?/init.lua`, so
+the modules can require each other by bare name and a module can be a directory; that is readability, not a
+precondition.
 
 ## The init.lua stub
 
@@ -142,7 +144,7 @@ bare name; that is readability, not a precondition.
 Generated, and syntax-checked at build time with **`pkgs.lua5_4`'s `luac -p`** — not `pkgs.lua`, which is still
 5.2.4 in the pinned nixpkgs, while Hammerspoon embeds Lua 5.4.7. A 5.2 gate would reject valid 5.3+ syntax (`//`,
 bitwise operators, `<const>`) and accept 5.2-isms Hammerspoon rejects, which matters because this gate is the only
-thing standing between a generated file and the dead-end failure described below. It does four things before loading
+thing standing between a generated file and the dead-end failure described below. It does five things before loading
 anything that can fail:
 
 1. Registers `hs.urlevent.httpCallback`.
@@ -153,9 +155,21 @@ anything that can fail:
    the cask must go in the same step that starts relying on it.
 3. Asserts `hs.configdir` matches what nix configured, loudly. Hammerspoon shipped a symlink-resolution regression in
    0.9.79 that broke sibling `require()`, reverted in 0.9.81, with no regression test guarding it since.
-4. Prepends `configdir/lua/?.lua` to `package.path`, so modules can require each other by bare name.
+4. Prepends `configdir/lua/?.lua` and `configdir/lua/?/init.lua` to `package.path`, so modules can require each other
+   by bare name.
+5. Starts the config-reload watcher, held in a global — `hs.pathwatcher` keeps no internal registry, so a watcher
+   referenced only by a local is collected and hot reload stops silently.
 
-Everything else loads inside `pcall`.
+Only the hand-edited config is then loaded, and only that load is wrapped in `pcall`. Steps 1-5 are deliberately
+outside it: they are the parts that must survive a broken module, so anything that could throw belongs after them,
+not before.
+
+**The final `require` must use the dotted `lua.init`.** A bare `require("init")` resolves through Hammerspoon's own
+`<configdir>/?.lua` template back to *the stub itself* whenever `lua/init.lua` is missing — and because Hammerspoon
+loads `init.lua` with `loadfile` rather than `require`, `package.loaded` never arms Lua's loop guard. It re-enters
+until the C stack overflows, and the enclosing `pcall` then reports that as success: no hotkeys, no error, and one
+live path watcher per level. `lua.init` maps to `lua/init.lua` and cannot collide with the stub. This is reachable
+through the `luaDir` override below, so it is not hypothetical.
 
 **Why the callback is registered first.** With no `httpCallback`, Hammerspoon does not forward the URL anywhere — it
 logs `no http callback has been set` and **drops the event**. A syntax error is worse: nothing in `init.lua` runs, so
@@ -237,8 +251,12 @@ The reload watcher must point at `<cfgdir>/lua`, never at `<cfgdir>`. `hs.pathwa
 creating the FSEvents stream, so watching `lua/` follows into the repo and fires on edits there; watching the parent
 sees only a symlink entry and never fires.
 
-Activation restarts Hammerspoon when `hs.configdir` does not yet match the configured path, and only reloads
-otherwise. The restart branch is what makes the first switch work, since the preference is read once at launch.
+Activation does nothing at all under `--dry-run`. `darwin-rebuild` routes that flag into build flags only and runs
+the activation script regardless, so without an explicit check a documented preview command would really restart
+Hammerspoon.
+
+Otherwise it restarts when `hs.configdir` does not yet match the configured path, and only reloads when it does. The
+restart branch is what makes the first switch work, since the preference is read once at launch.
 
 **A failed probe must count as a mismatch.** The comparison runs `hs -c`, which needs `hs.ipc` loaded in the *running*
 instance — and on the first activation that instance is still the old config, which never loaded it. So the probe

@@ -2,7 +2,8 @@
 #
 # Scope: what is needed to bring the nix-rosetta-builder Linux builder online,
 # provide nvim (plus its GUI, neovide) on PATH, and mirror this Mac's agent
-# session transcripts to the homelab archive. No home-manager, no homebrew, no
+# session transcripts to the homelab archive, and run Hammerspoon. home-manager
+# is wired in but scoped to the files the modules here declare; no homebrew, no
 # dock/system defaults. The full-featured starter lives in ../darwin/default.nix
 # and is a reference for a later migration; this module deliberately does not
 # import it.
