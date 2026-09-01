@@ -186,6 +186,18 @@ hard-coded `hs.urlevent.openURLWithBundle` fallback that depends on nothing outs
 
 ## Profile targeting *(planned)*
 
+Two decisions settle why this lives here rather than in a dedicated router.
+
+**Hammerspoon owns routing, the picker and the hotkeys.** It is required for the hotkeys regardless, so putting the
+router elsewhere would split one feature across two processes, two config languages and two permission surfaces, with
+the target list defined twice and free to drift.
+
+**Finicky is deferred as a unit with the rules that would justify it.** Its one irreplaceable feature is short-link
+unshortening — no Hammerspoon API returns a post-redirect URL — but that only pays off once domain rules exist to
+match against, and those rules are the client-specific part, which belongs in the private `kone` repo. Adopting it
+before then buys no routing decisions while adding a daemon whose broken-config behaviour is to route every link to
+hardcoded Safari.
+
 `local.browsers.targets` is the single source of truth: `{ key, label, bundle, profileDir }`, generating both the picker
 rows and the hyper hotkeys so the two cannot drift.
 
