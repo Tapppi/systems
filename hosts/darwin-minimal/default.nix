@@ -77,8 +77,9 @@ in
   environment.systemPackages = [ nvim neovide ];
 
   # --- home-manager ---
-  # Host-wide settings live here; modules under modules/darwin/ contribute
-  # home.file entries and nothing else.
+  # Host-wide settings live here. A module under modules/darwin/ may add
+  # home.file entries, but must not set any of these — the next one that did
+  # would collide. Only hammerspoon/ uses home-manager today.
   home-manager = {
     useGlobalPkgs = true;
     useUserPackages = true;

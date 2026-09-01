@@ -122,8 +122,9 @@ in
   config = {
     # Must be systemPackages, not home.packages: the TCC argument in README.md
     # rests on nix-darwin rsyncing the bundle into /Applications/Nix Apps, and
-    # that activation reads environment.systemPackages only. home-manager would
-    # link it into ~/Applications/Home Manager Apps as a plain store symlink.
+    # that activation reads environment.systemPackages only. home-manager's own
+    # app placement is off entirely at this stateVersion, so a home.packages
+    # app would not be placed at all.
     environment.systemPackages = [ hammerspoon ];
 
     # Written in the userDefaults phase, before the files below are placed.
