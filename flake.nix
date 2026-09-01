@@ -11,10 +11,7 @@
     # herdr ships every week or two and is worth updating far more often than
     # that. Update with `nix flake update nixpkgs-fresh`.
     nixpkgs-fresh.url = "github:nixos/nixpkgs/nixos-unstable";
-    # Must follow nixpkgs: left bare, home-manager pulls a second nixpkgs, and the
-    # two drifted apart in the lock. Evaluating its modules against a different
-    # nixpkgs than the system is built from is the documented cause of the
-    # version-mismatch errors this repo warns about.
+    # Must follow nixpkgs; left bare it pulls in a second one.
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -134,11 +131,9 @@
     {
       devShells = forAllSystems devShell;
 
-      # The hand-edited Hammerspoon Lua is symlinked out of the store, so it is
-      # deliberately absent from the system closure and a build can never catch
-      # a syntax error in it — only the generated stub is gated. This is where
-      # that gap is closed: `nix flake check` parses it with the same Lua 5.4
-      # the app embeds, and holds it to the repo's StyLua config.
+      # The hand-edited Hammerspoon Lua is symlinked out of the store, so no
+      # build can catch a syntax error in it. Parsed here with the same Lua the
+      # app embeds, and held to the repo's StyLua config.
       checks = forAllSystems (system:
         let pkgs = nixpkgs.legacyPackages.${system};
         in {
@@ -148,9 +143,7 @@
             cp ${./stylua.toml} stylua.toml
             chmod -R u+w lua
 
-            # find, not lua/*.lua: a flat glob would leave a syntax error in
-            # a subdirectory to be caught only by StyLua's parser, never by
-            # the version-matched Lua this check exists to use.
+            # find, not a glob: subdirectories must be checked too.
             find lua -name '*.lua' -print0 | xargs -0 -n1 luac -p
 
             stylua --check lua

@@ -127,19 +127,17 @@ M._filters = {}
 
 function M.bindToggle(key, bundleID, layoutFn, opts)
   opts = opts or {}
-  -- Explicit nil test: `a ~= nil and a or default` cannot carry a falsey
-  -- value, so `inputSource = false` silently became M.fiProg and the guards
-  -- below were unreachable.
+  -- Explicit nil test: the `and`/`or` idiom cannot carry a falsey value, so
+  -- `inputSource = false` would collapse to the default.
   local inputSource = M.fiProg
   if opts.inputSource ~= nil then
     inputSource = opts.inputSource
   end
 
   -- Optional: watch for newly created windows and auto-position them.
-  -- `watching` rather than opts.watchCreate downstream: nameForBundleID returns
-  -- nil for an app LaunchServices has not registered yet, and treating the
-  -- option as proof the filter exists would disable the delayed-positioning
-  -- fallback too, leaving the app never positioned for the whole session.
+  -- Track whether the filter was actually created: nameForBundleID returns nil
+  -- for an app LaunchServices has not registered, and the option alone is no
+  -- proof the filter exists.
   local watching = false
   if opts.watchCreate then
     local appName = hs.application.nameForBundleID(bundleID)
@@ -195,8 +193,7 @@ function M.bindToggle(key, bundleID, layoutFn, opts)
       win:focus()
     else
       -- allWindows() counts minimized windows but mainWindow() returns nil
-      -- unless one is AXMain, so without this the hotkey did nothing at all
-      -- for an app whose only window is minimized.
+      -- unless one is AXMain.
       hs.application.launchOrFocusByBundleID(bundleID)
     end
 
