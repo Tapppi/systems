@@ -1,16 +1,14 @@
 # Hammerspoon, unpacked from the upstream release zip.
 #
-# Not in nixpkgs, so this is a local package rather than an overlay. The
-# version is pinned by hand: releases are rare (1.0.0 in 2024-08, 1.1.0 in
-# 2025-12, 1.1.1 in 2026-02), so this needs touching once or twice a year.
+# Not in nixpkgs, so the version is pinned by hand; releases are roughly
+# annual.
 #
 #   nix store prefetch-file --name Hammerspoon-<ver>.zip \
 #     https://github.com/Hammerspoon/hammerspoon/releases/download/<ver>/Hammerspoon-<ver>.zip
 #
-# Everything here exists to land the notarized bundle in the store BYTE FOR
-# BYTE. Accessibility is granted against the bundle's designated requirement,
-# and Hammerspoon is inert without it — see ./README.md for why that survives
-# both the move off Homebrew and later version bumps.
+# The bundle must land in the store byte for byte: Accessibility is granted
+# against its designated requirement, and Hammerspoon is inert without it.
+# See ./README.md.
 { lib, stdenvNoCC, fetchurl, unzip }:
 
 stdenvNoCC.mkDerivation (finalAttrs: {
@@ -34,29 +32,23 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
     mkdir -p "$out/Applications" "$out/bin" "$out/share/man/man1"
 
-    # cp -R, not `cp -RL`: the bundle contains 11 relative framework symlinks
-    # (Foo.framework/Versions/Current) that the code seal covers as symlinks.
+    # cp -R, not `cp -RL`: the seal covers the bundle's internal framework
+    # symlinks as symlinks.
     cp -R Hammerspoon.app "$out/Applications/"
 
     app="$out/Applications/Hammerspoon.app"
 
-    # The CLI is a separately signed Mach-O linking only /System and /usr/lib,
-    # with no LC_RPATH and no @executable_path, so it needs no wrapper. It must
-    # be exported here because the Homebrew cask's /opt/homebrew/bin/hs is a
-    # symlink into the cask's bundle and dangles once that goes — and Homebrew
-    # precedes Nix on PATH, so it would shadow this one even while broken.
+    # Standalone Mach-O with no rpath, so a symlink suffices. Exported here
+    # because the cask's /opt/homebrew/bin/hs dangles once the cask goes.
     ln -s "$app/Contents/Frameworks/hs/hs" "$out/bin/hs"
     ln -s "$app/Contents/Resources/man/hs.man" "$out/share/man/man1/hs.1"
 
     runHook postInstall
   '';
 
-  # MANDATORY. Contents/Resources/timeout3 is the bundle's only shebang script
-  # and it is sealed in CodeResources under ^Resources/ with no omit and no
-  # optional. patchShebangs would repoint it at a store bash and invalidate
-  # that seal, after which `codesign --verify` fails with "a sealed resource is
-  # missing or invalid". This also skips fixupPhase entirely, which is what
-  # keeps strip away from the bundle.
+  # MANDATORY: patchShebangs would rewrite the bundle's one sealed shebang
+  # script and break signature verification. Also skips fixupPhase, which is
+  # what keeps strip away from the bundle.
   dontFixup = true;
 
   meta = {

@@ -76,29 +76,25 @@ in
   environment.systemPackages = [ nvim neovide ];
 
   # --- home-manager ---
-  # Host-wide because these are host-wide: an app module setting stateVersion
-  # or users.users would collide the moment a second one did the same, and
-  # both starter modules already pin a different stateVersion. Modules under
-  # modules/darwin/ contribute home.file entries and nothing else.
-  #
-  # Scoped deliberately: useUserPackages keeps home.profileDirectory at
-  # /etc/profiles/per-user rather than materialising ~/.nix-profile, which
-  # does not exist on this machine. The three suppressions below drop files
-  # home-manager would otherwise place on darwin for a config that manages no
-  # packages and no fonts.
+  # Host-wide settings live here; modules under modules/darwin/ contribute
+  # home.file entries and nothing else.
   home-manager = {
     useGlobalPkgs = true;
     useUserPackages = true;
     extraSpecialArgs = { inherit inputs; };
 
-    # Insurance for the first activation. linkGeneration refuses to clobber a
-    # pre-existing unmanaged file and exits non-zero, and the activate script
-    # runs under set -e — which would abort after the system profile has been
-    # set but before /run/current-system is relinked.
+    # Without this, an existing unmanaged file at a managed path aborts
+    # activation midway rather than being moved aside.
     backupFileExtension = "hm-bak";
 
     users.${user} = {
-      home.stateVersion = "25.05";
+      # Newest supported, converging with the NixOS hosts rather than with
+      # the starter modules still on 25.05.
+      home.stateVersion = "26.11";
+
+      # This config manages no packages and no fonts, so drop the files
+      # home-manager would otherwise place on darwin. copyApps defaults on
+      # from stateVersion 25.11.
       targets.darwin.copyApps.enable = false;
       home.file."Library/Fonts/.home-manager-fonts-version".enable = false;
       home.file."${home}/.cache/.keep".enable = false;
