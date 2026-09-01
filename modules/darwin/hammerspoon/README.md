@@ -41,14 +41,19 @@ Accessibility. That objection does not apply *to this package*, and the reason i
   nix-built 1.1.1 in `/nix/store` satisfies the requirement stored for the Homebrew copy, as does 1.0.0, so a version
   bump does not re-prompt.
 - Since nix-darwin PR #1396 (merged 2025-08-22), `system.activationScripts.applications` **rsyncs** bundles into
-  `/Applications/Nix Apps` (`--checksum --copy-unsafe-links --archive --delete --chmod=-w`) rather than symlinking the
-  folder into the store, so the installed bundle is a real directory. Stable, not permanent: the same script still
-  carries a `TODO: Remove this in 25.11` cleanup for the previous `~/Applications` location.
+  `/Applications/Nix Apps` (`--checksum --copy-unsafe-links --archive --delete --chmod=-w --no-group --no-owner`)
+  rather than symlinking the folder into the store, so the installed bundle is a real directory. Stable, not
+  permanent: the same script still carries a `TODO: Remove this in 25.11` cleanup for the previous `~/Applications`
+  location.
 
-**The bundle must come from `environment.systemPackages`, not `home.packages`.** The rsync source is
+**The bundle must come from `environment.systemPackages`, not `home.packages`.** The rsync above draws from
 `buildEnv { paths = config.environment.systemPackages; pathsToLink = ["/Applications"]; }` — system packages only.
-home-manager on darwin links apps into `~/Applications/Home Manager Apps` as plain store symlinks with no rsync, so
-putting the app there would evaporate the whole real-directory property. Config through home-manager, bundle through
+
+home-manager has two darwin app-placement mechanisms, and which is the default is gated on `home.stateVersion`:
+`linkApps` (a plain store symlink) below 25.11, `copyApps` (its own rsync) at or above it. This host is on 26.11 and
+disables `copyApps`, while `linkApps` defaults off at that version — so **home-manager would place a `home.packages`
+app by neither mechanism** and it would simply not appear. Either way it would not land at the stable
+`/Applications/Nix Apps` path the TCC argument depends on. Config through home-manager, bundle through
 `environment.systemPackages`.
 
 **And the activation mechanism is not what makes this TCC-safe — the packaging is.** `--copy-unsafe-links`
@@ -194,9 +199,12 @@ the target list defined twice and free to drift.
 
 **Finicky is deferred as a unit with the rules that would justify it.** Its one irreplaceable feature is short-link
 unshortening — no Hammerspoon API returns a post-redirect URL — but that only pays off once domain rules exist to
-match against, and those rules are the client-specific part, which belongs in the private `kone` repo. Adopting it
-before then buys no routing decisions while adding a daemon whose broken-config behaviour is to route every link to
-hardcoded Safari.
+match against, and those rules are the client-specific part. Adopting it before then buys no routing decisions while
+adding a daemon whose broken-config behaviour is to route every link to hardcoded Safari.
+
+Four things wait for the private `kone` repo together: URL rewriting, source-application rules, unshortening, and any
+domain matching. Each needs client-identifying data that must not enter a public repo — the same reason the target
+list stores on-disk profile *directories* rather than display names.
 
 `local.browsers.targets` is the single source of truth: `{ key, label, bundle, profileDir }`, generating both the picker
 rows and the hyper hotkeys so the two cannot drift.

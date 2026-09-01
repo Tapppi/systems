@@ -76,7 +76,8 @@ The repository structure is based on [dustinlyons/nixos-config](https://github.c
 ├── flakes/         # Standalone flake configurations
 │   └── nvim/       # Neovim configuration (with its own detailed AGENTS.md file, see "Neovim Configuration" section)
 ├── hosts/          # Host-specific configurations
-│   ├── darwin/
+│   ├── darwin/          # upstream starter, never activated, not instantiated
+│   ├── darwin-minimal/  # asterix — the live macOS host
 │   └── nixos/
 ├── modules/        # System configuration modules
 │   ├── darwin/     # macOS-specific modules
@@ -237,8 +238,10 @@ on a rebuilt machine. Reach for it — or preferably `nix shell nixpkgs#<pkg>`,
 which is ephemeral and leaves nothing behind — only for genuine throwaways.
 Anything else belongs in a module here.
 
-`~/.nix-profile` does not currently exist on asterix: nothing is installed
-imperatively, and it should stay that way.
+`~/.nix-profile` on asterix is Determinate's own scaffolding — a symlink to
+`~/.local/state/nix/profiles/profile`, whose target does not exist. `nix profile
+list` is empty: nothing is installed imperatively, and it should stay that way.
+`useUserPackages = true` is what keeps home-manager from materialising it.
 
 ### Development Shell
 
