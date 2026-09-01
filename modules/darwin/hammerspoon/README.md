@@ -271,9 +271,10 @@ The reload watcher must point at `<cfgdir>/lua`, never at `<cfgdir>`. `hs.pathwa
 creating the FSEvents stream, so watching `lua/` follows into the repo and fires on edits there; watching the parent
 sees only a symlink entry and never fires.
 
-Activation does nothing at all under `--dry-run`. `darwin-rebuild` routes that flag into build flags only and runs
-the activation script regardless, so without an explicit check a documented preview command would really restart
-Hammerspoon.
+Activation does nothing at all under a dry run — triggered either by a `DRY_RUN` environment variable or by
+`--dry-run` in the parent's argv, matching home-manager's own guard. `darwin-rebuild` routes that flag into build
+flags only and runs the activation script regardless, so without an explicit check a documented preview command would
+really restart Hammerspoon.
 
 Otherwise it restarts when `hs.configdir` does not yet match the configured path, and only reloads when it does. The
 restart branch is what makes the first switch work, since the preference is read once at launch.

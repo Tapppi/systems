@@ -13,8 +13,9 @@ Imported by `hosts/darwin-minimal/`. Changing these changes a real machine.
 └── hammerspoon/       # the Hammerspoon app and its config — read its README first
 ```
 
-These contribute `home.file` entries but never host-wide home-manager settings:
-`stateVersion`, `users.users` and the `useGlobalPkgs`/`useUserPackages`/`backupFileExtension` options belong to
+They contribute host-level configuration — `environment.systemPackages`, activation scripts, launchd agents — and, in
+`hammerspoon/`'s case, `home.file` entries. None of them sets host-wide home-manager settings: `stateVersion`,
+`users.users` and the `useGlobalPkgs`/`useUserPackages`/`backupFileExtension` options belong to
 `hosts/darwin-minimal/default.nix`, because a second module setting any of them would collide on a non-mergeable
 option.
 
