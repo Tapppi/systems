@@ -49,12 +49,12 @@ M.onFocus = nil
 -- A second path to the focus policy, held and replaced like the retry. The
 -- windowFocused filter is the first, but it drops events for windows it does not
 -- consider visible, and a window just unhidden may not be yet. A request still
--- pending once its app has focus is applied from here instead.
+-- pending once its app has focus is applied from here instead, checked every
+-- second until the request expires.
 M.intentCheckDelay = 1
 M._intentCheck = nil
 
-function M.requestInputSource(bundleID, sourceID)
-  intent = { bundle = bundleID, source = sourceID, at = hs.timer.secondsSinceEpoch() }
+local function armIntentCheck(bundleID)
   if M._intentCheck then
     M._intentCheck:stop()
   end
@@ -63,7 +63,8 @@ function M.requestInputSource(bundleID, sourceID)
     if M._intentCheck == timer then
       M._intentCheck = nil
     end
-    if not M.onFocus or intent == nil or intent.bundle ~= bundleID then
+    local pending = intent
+    if not M.onFocus or pending == nil or pending.bundle ~= bundleID then
       return
     end
     local focused = hs.window.focusedWindow()
@@ -72,9 +73,17 @@ function M.requestInputSource(bundleID, sourceID)
     -- is still being typed in, which is the defect the request exists to avoid.
     if app and app:bundleID() == bundleID then
       M.onFocus(focused)
+    elseif hs.timer.secondsSinceEpoch() - pending.at < M.intentTTL then
+      -- A slow unhide or launch can take longer than one check.
+      armIntentCheck(bundleID)
     end
   end)
   M._intentCheck = timer
+end
+
+function M.requestInputSource(bundleID, sourceID)
+  intent = { bundle = bundleID, source = sourceID, at = hs.timer.secondsSinceEpoch() }
+  armIntentCheck(bundleID)
 end
 
 --- The layout a hotkey asked for, if this focus is the one it was waiting for.
@@ -202,12 +211,13 @@ end
 
 --- Is `win` one of `windows`?
 ---
---- hs.window:id() is nil for a window whose AX id cannot be read, and Chromium
---- keeps several such helper windows per real one. Comparing two nils would
---- report an unrelated window as a match, so a window with no id is never one.
+--- hs.window:id() is 0 for a window whose AX id cannot be read — Hammerspoon
+--- 1.1.1 pushes the integer unconditionally — and Chromium keeps several such
+--- helper windows per real one. Comparing two of them would report an unrelated
+--- window as a match, so a window with no readable id is never one.
 function M.containsWindow(windows, win)
   local id = win and win:id()
-  if not id then
+  if not id or id == 0 then
     return false
   end
   for _, w in ipairs(windows) do
@@ -234,6 +244,8 @@ end
 -- spec.placesNew    — true when something else already positions new windows
 -- spec.byAppAlone() — optional; false when the app's process does not identify
 --                     these windows by itself, as for one browser profile of several
+-- spec.frontmost()  — optional; true when the whole app has focus and a press
+--                     should put it away even with no window of its focused
 
 -- Timers for windows that do not exist yet. Held, because hs.timer keeps no
 -- registry and would collect them; keyed by spec.id so a press replaces rather
@@ -275,8 +287,8 @@ local function putAway(windows, focused)
   local othersVisible = false
   if not focused:isFullScreen() then
     for _, w in ipairs(app:visibleWindows()) do
-      -- Standard only: Chromium's companion windows have no id, so they never
-      -- match and would otherwise always count as someone else's.
+      -- Standard only: Chromium's companion windows have no readable id, so they
+      -- never match and would otherwise always count as someone else's.
       if w:isStandard() and not M.containsWindow(windows, w) then
         othersVisible = true
         break
@@ -297,17 +309,23 @@ end
 -- server's full list does carry the owner, so it is read through JXA — about
 -- 70ms, and only once a full-screen Space exists and the hotkey found nothing.
 
-local ownersScript = [[
+-- Only document windows: layer 0, not transparent, and real-sized. A Space's
+-- window list also carries tooltips, overlays and ordered-out leftovers, and an
+-- app owning one of those on a full-screen Space does not have a window there.
+M.ownersScript = [[
 ObjC.import("CoreGraphics");
 var all = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionAll, 0)));
-all.map(function (w) { return w.kCGWindowNumber + " " + w.kCGWindowOwnerPID; }).join("\n");
+all.filter(function (w) {
+  var b = w.kCGWindowBounds || {};
+  return w.kCGWindowLayer === 0 && w.kCGWindowAlpha > 0 && b.Width >= 200 && b.Height >= 200;
+}).map(function (w) { return w.kCGWindowNumber + " " + w.kCGWindowOwnerPID; }).join("\n");
 ]]
 
---- Window id → owning pid, for every window the window server knows.
+--- Window id → owning pid, for every document window the window server knows.
 function M.windowOwners()
   -- hs.execute goes through sh, so the script is single-quoted and must not
   -- contain a single quote itself.
-  local out, ok = hs.execute("/usr/bin/osascript -l JavaScript -e '" .. ownersScript .. "'")
+  local out, ok = hs.execute("/usr/bin/osascript -l JavaScript -e '" .. M.ownersScript .. "'")
   local owners = {}
   if not ok or type(out) ~= "string" then
     return owners
@@ -323,10 +341,18 @@ local function fullScreenSpaces()
   if not ok or type(all) ~= "table" then
     return {}
   end
+  -- Never the Space already on screen: going there does nothing, and a tiled
+  -- split-view Space holds the other app's focus. launchOrFocus activates the app
+  -- in place, as it always did.
+  local activeOk, active = pcall(hs.spaces.activeSpaces)
+  local onScreen = {}
+  for _, id in pairs(activeOk and type(active) == "table" and active or {}) do
+    onScreen[id] = true
+  end
   local spaces = {}
   for _, ids in pairs(all) do
     for _, id in ipairs(ids) do
-      if hs.spaces.spaceType(id) == "fullscreen" then
+      if not onScreen[id] and hs.spaces.spaceType(id) == "fullscreen" then
         spaces[#spaces + 1] = id
       end
     end
@@ -342,13 +368,24 @@ end
 --- it: a browser profile sharing a process with another cannot tell which of
 --- them a full-screen window is, and going to the wrong one is worse than a new
 --- window.
+-- When the last press went to a Space. gotoSpace drives Mission Control and
+-- blocks while it does; a second one mid-transition can leave Mission Control
+-- open, so presses inside this window do nothing rather than start another.
+M.spaceSettle = 1.5
+M._wentToSpaceAt = nil
+
 function M.fullScreenWindow(spec)
   if spec.byAppAlone and not spec.byAppAlone() then
     return nil
   end
+  local now = hs.timer.secondsSinceEpoch()
+  if M._wentToSpaceAt and now - M._wentToSpaceAt < M.spaceSettle then
+    return function() end
+  end
   local pids = {}
   local any = false
-  for _, app in ipairs(hs.application.applicationsForBundleID(spec.bundle) or {}) do
+  local apps = hs.application.applicationsForBundleID(spec.bundle) or {}
+  for _, app in ipairs(apps) do
     local pid = app:pid()
     if pid then
       pids[pid] = true
@@ -370,9 +407,20 @@ function M.fullScreenWindow(spec)
     for _, id in ipairs(ok and ids or {}) do
       if pids[owners[id]] then
         return function()
+          -- A press from inside a full-screen app hides it, and a hidden app's
+          -- Space shows nothing, so it comes back first.
+          for _, app in ipairs(apps) do
+            app:unhide()
+          end
           -- Goes through Mission Control, which is unavoidable and brief. On
           -- arrival the window takes focus, so the layout request still applies.
-          hs.spaces.gotoSpace(space)
+          M._wentToSpaceAt = now
+          -- It returns nil and a message rather than raising when it cannot go.
+          local called, arrived = pcall(hs.spaces.gotoSpace, space)
+          if not called or not arrived then
+            M._wentToSpaceAt = nil
+            spec.launch()
+          end
         end
       end
     end
@@ -415,6 +463,14 @@ function M.toggle(spec)
 
   if M.containsWindow(windows, focused) then
     putAway(windows, focused)
+    return
+  end
+
+  -- The app has focus but not through one of these windows — a dialog, a panel,
+  -- Finder's desktop. The press still means "put it away".
+  local frontmost = spec.frontmost and spec.frontmost()
+  if frontmost then
+    frontmost:hide()
     return
   end
 
@@ -464,9 +520,16 @@ local function ownedByBundle(bundleID)
   end
 end
 
+--- The app's running instance, if any. Not hs.application.get: for an app that
+--- is not running it falls back to matching names and then every window title
+--- as a pattern, which is slow and can hand back a window instead of an app.
+local function runningApp(bundleID)
+  return (hs.application.applicationsForBundleID(bundleID) or {})[1]
+end
+
 --- Every standard window of the app, its main window first.
 local function appWindows(bundleID, owns)
-  local app = hs.application.get(bundleID)
+  local app = runningApp(bundleID)
   if not app then
     return {}
   end
@@ -519,6 +582,10 @@ function M.bindToggle(key, bundleID, layoutFn, opts)
     layout = layoutFn,
     inputSource = inputSource,
     placesNew = opts.watchCreate == true,
+    frontmost = function()
+      local app = runningApp(bundleID)
+      return app and app:isFrontmost() and app or nil
+    end,
   }
 
   hs.hotkey.bind(M.hyper, key, function()

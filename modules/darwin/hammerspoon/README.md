@@ -118,7 +118,8 @@ Every hyper hotkey — the apps in `lua/init.lua` and one per browser target —
 passed in: which windows the hotkey owns and how it opens one. A press:
 
 - **puts away** a focused window that is the hotkey's own: hides the app, or minimizes just that window when another of
-  the app's standard windows is showing (another browser profile's). A full-screen window always hides;
+  the app's standard windows is showing (another browser profile's). A full-screen window always hides. An app hotkey
+  also hides its app when the app is frontmost with a dialog, panel or Finder's desktop focused;
 - **raises** otherwise: unhides, unminimizes, applies the layout, focuses;
 - **goes to a full-screen window's Space** when the hotkey has no window on this one (see below);
 - **launches** when there is nothing, and positions the new window after 1.5s with a held timer that the next press
@@ -127,9 +128,11 @@ passed in: which windows the hotkey owns and how it opens one. A press:
 
 **A hotkey never switches the keyboard layout at press time.** It records the layout it wants, and the `windowFocused`
 handler applies it when that app's window takes focus. Set at press, the layout changed under the app still being typed
-in and landed before the handler, which then recorded the forced layout as the one to return to. The filter drops
-events for windows it does not yet consider visible, so a held check one second later applies a request still pending
-once its app has focus; the policy is safe to run twice for one focus. The request expires after 10s. Apps in `forceUSApps` get US and the previous layout is restored on leaving them; the retry that works around
+in and landed before the handler, which then recorded the forced layout as the one to return to.
+
+The filter drops events for windows it does not yet consider visible, so a held check looks every second for a request
+still pending once its app has focus, until the request expires after 10s; the policy is safe to run twice for one
+focus. Apps in `forceUSApps` get US and the previous layout is restored on leaving them. The retry that works around
 macOS dropping the first switch is held and replaced, never left armed.
 
 **The focus filter is `hs.window.filter.new(nil)`**, a copy of the default: `visible = true` plus 30 named rejects,
@@ -140,10 +143,12 @@ the hotkey apps is on that list. `new(true)` would have no rules at all.
 returns nil, while `hs.spaces.windowsForSpace` still lists the id (measured). Two consequences are handled:
 
 - pressed from inside a full-screen app, `focusedWindow()` still sees the window, so it counts as the hotkey's own;
-- pressed from elsewhere, when a `fullscreen` Space exists, the window server's full list (read through JXA, ~70ms)
-  gives each window's owner pid, and a Space holding one of the app's windows is gone to with `hs.spaces.gotoSpace` —
-  Mission Control, briefly. A browser profile sharing its process with another profile never does this, because the
-  pid cannot say which profile the window is; it launches instead.
+- pressed from elsewhere, when a `fullscreen` Space other than the visible one exists, the window server's full list
+  (read through JXA, ~90ms) gives each document window's owner pid — layer 0, not transparent, at least 200×200, since
+  a Space's list also carries tooltips and ordered-out leftovers. The app is unhidden and its Space gone to with
+  `hs.spaces.gotoSpace`, which drives Mission Control and blocks while it does; presses within 1.5s of it do nothing,
+  and a failed `gotoSpace` launches instead. A browser profile sharing its process with another profile never does
+  this, because the pid cannot say which profile the window is; it launches.
 
 Ordinary Spaces are not a problem: `allWindows()` returns windows on an unfocused Space on this macOS (measured).
 
@@ -160,7 +165,8 @@ what keeps client names out of this public repo.
 **Launching is `open -n -a <browser> --args --profile-directory=<dir> <url>`**, argv via `hs.task`. `-n` is mandatory:
 `--args` only applies to a new instance, and without it a running browser receives neither the profile nor the URL.
 Chromium's process singleton forwards the whole argv to the running instance, which is what makes this work. A target
-with no `profileDir` gets no `-n` and no `--args`: `open` would hand the URL over as argv, which only Chromium reads.
+with no `profileDir` gets no `-n` and no `--args` — `open` would hand the URL over as argv, which only Chromium reads —
+unless it is a Chromium target opening a private window, which needs `--incognito` passed that way.
 
 ### Finding a profile's windows
 
@@ -178,10 +184,12 @@ separator is localized.
 - A browser that knows several names every window, so a bare title is **unknown**. That covers automation copies of
   Chrome (`chrome-devtools-mcp`, own `--user-data-dir`, same bundle id) — which is also why lookup iterates
   `applicationsForBundleID` rather than `application.get`.
-- Private and Guest windows end `(Incognito)`, `(Private)` or `(Guest)` instead, so they belong to no profile: with only
-  a private window open, the profile's hotkey opens an ordinary one.
+- Private and Guest windows end `(Incognito)`, `(Private)` or `(Guest)` instead, so in a browser that knows several
+  profiles they belong to none: with only a private window open, the profile's hotkey opens an ordinary one. A browser
+  that knows one profile (Brave, today) claims its private windows too, so its hotkey toggles them.
 
-Only `isStandard()` windows count: Chromium's companion status-bar windows have no id and never minimize.
+Only `isStandard()` windows count: Chromium's companion status-bar windows have no readable id (1.1.1 reports 0, which
+never matches) and never minimize.
 
 ## The picker
 

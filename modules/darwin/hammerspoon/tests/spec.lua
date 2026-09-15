@@ -86,10 +86,10 @@ check(
 print("shared window helpers")
 local whu = require("window-hotkey-utils")
 check(
-  "containsWindow never matches on a nil id",
+  "containsWindow never matches on an unreadable id",
   (function()
-    -- Chromium keeps helper windows whose AX id cannot be read. Comparing two
-    -- nils would report an unrelated window as a match.
+    -- Chromium keeps helper windows whose AX id cannot be read, which 1.1.1
+    -- reports as 0. Comparing two would report an unrelated window as a match.
     local noId = mkwin(nil, "helper")
     local other = mkwin(nil, "another helper")
     return whu.containsWindow({ noId }, other) == false
@@ -384,32 +384,37 @@ check(
       whu.claimInputSource(win:application())
     end
     NOW = 6000
-    local base = #RECORDED.timers
 
     local other = mkwin(320, "elsewhere")
     mkapp({ other }, { bundle = "com.example.StillTyping" })
     whu.requestInputSource("com.example.Checked", whu.us)
-    local check1 = timersSince(base, whu.intentCheckDelay)[1]
+    local first = whu._intentCheck
     FOCUSED = other
-    check1.fn()
+    first.fn()
+    -- Still typing elsewhere: nothing applied, and it looks again rather than
+    -- giving up on a slow unhide.
     local notYet = #calls == 0
+    local rearmed = whu._intentCheck ~= nil and whu._intentCheck ~= first
 
+    NOW = 6000 + whu.intentTTL + 1
+    whu._intentCheck.fn()
+    local gaveUp = #calls == 0 and whu._intentCheck == nil
+
+    NOW = 7000
     local arrived = mkwin(321, "arrived")
     mkapp({ arrived }, { bundle = "com.example.Checked" })
     whu.requestInputSource("com.example.Checked", whu.us)
-    local check2 = timersSince(base, whu.intentCheckDelay)[2]
     FOCUSED = arrived
-    check2.fn()
-    local applied = #calls == 1 and calls[1] == 321
+    whu._intentCheck.fn()
+    local applied = #calls == 1 and calls[1] == 321 and whu._intentCheck == nil
 
     -- Already consumed by the filter: the check must not run the policy again.
     whu.requestInputSource("com.example.Checked", whu.us)
-    local check3 = timersSince(base, whu.intentCheckDelay)[3]
+    local third = whu._intentCheck
     whu.claimInputSource(arrived:application())
-    check3.fn()
-    local notTwice = #calls == 1
+    third.fn()
+    local notTwice = #calls == 1 and whu._intentCheck == nil
 
-    local cleared = whu._intentCheck == nil
     -- Held and replaced: a later press supersedes the earlier check.
     whu.requestInputSource("com.example.Checked", whu.us)
     local superseded = whu._intentCheck
@@ -418,7 +423,7 @@ check(
     whu.claimInputSource(arrived:application())
 
     whu.onFocus = savedOnFocus
-    return notYet and applied and notTwice and cleared and replaced
+    return notYet and rearmed and gaveUp and applied and notTwice and replaced
   end)(),
   "a check that fires early switches the layout under the app still being typed in"
 )
@@ -597,20 +602,27 @@ local function fullScreenSpace()
   SPACE_TYPES = { [50] = "fullscreen" }
   SPACE_WINDOWS = { [50] = { 899, 900 } }
   EXECUTE_OUTPUT = "12 5\n900 77\n899 3\n"
+  -- Each check is its own press, well past the settle window of the last one.
+  whu._wentToSpaceAt = nil
 end
 
 local function noFullScreenSpace()
   SPACES, SPACE_TYPES, SPACE_WINDOWS, EXECUTE_OUTPUT = nil, nil, nil, nil
+  ACTIVE_SPACES, GOTO_FAILS, SPACES_FAIL = nil, nil, nil
+  whu._wentToSpaceAt = nil
 end
 
 check(
   "no owner lookup runs unless a full-screen Space exists",
   (function()
     noFullScreenSpace()
+    -- A second ordinary Space, off screen, so only its type can rule it out.
+    SPACES = { ["screen-1"] = { 1, 2 } }
     local executedBefore = RECORDED.executed or 0
     local launchesBefore = #RECORDED.launchOrFocus
     FOCUSED = nil
     whu.toggle(appHotkey("t11", "com.example.Plain", {}, { pid = 77 }))
+    noFullScreenSpace()
     return (RECORDED.executed or 0) == executedBefore and #RECORDED.launchOrFocus == launchesBefore + 1
   end)(),
   "the lookup spawns osascript, so the common launch must not pay for it"
@@ -638,11 +650,83 @@ check(
   (function()
     -- hs.execute runs through sh. A quote inside the script ends the argument
     -- early, osascript gets half a program, and every lookup finds no owner.
+    RECORDED.lastExecuted = nil
+    whu.windowOwners()
     local command = RECORDED.lastExecuted or ""
     local _, quotes = command:gsub("'", "")
     return quotes == 2 and command:find("^/usr/bin/osascript %-l JavaScript %-e '") ~= nil
   end)(),
   tostring(RECORDED.lastExecuted)
+)
+
+check(
+  "a hidden full-screen app is brought back before its Space is gone to",
+  (function()
+    -- A press from inside a full-screen app hides it; the next press, from
+    -- another Space, would otherwise land on a Space showing nothing.
+    fullScreenSpace()
+    local spec, app = appHotkey("t15", "com.example.HiddenFull", {}, { pid = 77 })
+    app.hide()
+    FOCUSED = nil
+    whu.toggle(spec)
+    noFullScreenSpace()
+    return RECORDED.wentToSpace == 50 and app._hidden == false
+  end)()
+)
+
+check(
+  "a Space that cannot be gone to launches instead",
+  (function()
+    fullScreenSpace()
+    GOTO_FAILS = true
+    local launchesBefore = #RECORDED.launchOrFocus
+    FOCUSED = nil
+    whu.toggle(appHotkey("t16", "com.example.GotoFails", {}, { pid = 77 }))
+    noFullScreenSpace()
+    return #RECORDED.launchOrFocus == launchesBefore + 1
+  end)(),
+  "gotoSpace returns nil and a message rather than raising"
+)
+
+check(
+  "the full-screen Space already on screen is not gone to",
+  (function()
+    -- Tiled split view: the app's tile shares the Space with the focused one,
+    -- and gotoSpace to where you already are only flashes Mission Control.
+    fullScreenSpace()
+    ACTIVE_SPACES = { ["screen-1"] = 50 }
+    RECORDED.wentToSpace = nil
+    local launchesBefore = #RECORDED.launchOrFocus
+    FOCUSED = nil
+    whu.toggle(appHotkey("t17", "com.example.SplitView", {}, { pid = 77 }))
+    noFullScreenSpace()
+    return RECORDED.wentToSpace == nil and #RECORDED.launchOrFocus == launchesBefore + 1
+  end)()
+)
+
+check(
+  "a second press while Mission Control is still moving does nothing",
+  (function()
+    fullScreenSpace()
+    NOW = 8000
+    FOCUSED = nil
+    local spec = appHotkey("t18", "com.example.DoublePress", {}, { pid = 77 })
+    whu.toggle(spec)
+    local executedAfterFirst = RECORDED.executed or 0
+    RECORDED.wentToSpace = nil
+    local launchesBefore = #RECORDED.launchOrFocus
+    NOW = 8000 + whu.spaceSettle / 2
+    whu.toggle(spec)
+    local quiet = RECORDED.wentToSpace == nil
+      and #RECORDED.launchOrFocus == launchesBefore
+      and (RECORDED.executed or 0) == executedAfterFirst
+    NOW = 8000 + whu.spaceSettle + 1
+    whu.toggle(spec)
+    local again = RECORDED.wentToSpace == 50
+    noFullScreenSpace()
+    return quiet and again
+  end)(),
+  "a second gotoSpace mid-transition can leave Mission Control open"
 )
 
 check(
@@ -688,10 +772,57 @@ check(
     FOCUSED = nil
     local ok = pcall(whu.toggle, appHotkey("t14", "com.example.SpacesDown", {}, { pid = 77 }))
     SPACES_RAISE = nil
+    SPACES_FAIL = true
+    local okNil = pcall(whu.toggle, appHotkey("t19", "com.example.SpacesNil", {}, { pid = 77 }))
     noFullScreenSpace()
-    return ok and #RECORDED.launchOrFocus == launchesBefore + 1
+    return ok and okNil and #RECORDED.launchOrFocus == launchesBefore + 2
   end)(),
   "hs.spaces rests on private APIs; a raise there must not kill the hotkey"
+)
+
+check(
+  "a frontmost app is put away even when no window of its has focus",
+  (function()
+    -- A dialog, a panel or Finder's desktop holds focus; the press still means
+    -- "put it away", as it did before the toggles converged.
+    local win = mkwin(330, "finder window")
+    local spec, app = appHotkey("t20", "com.example.Desktop", { win }, { main = win })
+    FRONTMOST = app
+    FOCUSED = mkwin(0, "desktop", { standard = false, app = app })
+    local focusedBefore = #RECORDED.focused
+    whu.toggle(spec)
+    FRONTMOST = nil
+    return app._hidden == true and #RECORDED.focused == focusedBefore
+  end)()
+)
+
+check(
+  "a browser profile never hides the app for another profile's focus",
+  (function()
+    local theirs = mkwin(331, "Other - Google Chrome - Tapani (Client Co)")
+    local mine = mkwin(332, "Page - Google Chrome - Tapani (acme.example)")
+    local chromeApp = mkapp({ theirs, mine }, { bundle = "com.google.Chrome" })
+    APPS["com.google.Chrome"] = { chromeApp }
+    FRONTMOST = chromeApp
+    FOCUSED = theirs
+    browsers.toggle(company, nil)
+    FRONTMOST = nil
+    return chromeApp._hidden == false and RECORDED.focused[#RECORDED.focused] == 332
+  end)()
+)
+
+check(
+  "hide then press again raises the same window",
+  (function()
+    local win = mkwin(333, "chat")
+    local spec, app = appHotkey("t21", "com.example.RoundTrip", { win }, { main = win })
+    FOCUSED = win
+    whu.toggle(spec)
+    local hidden = app._hidden == true
+    FOCUSED = nil
+    whu.toggle(spec)
+    return hidden and app._hidden == false and RECORDED.focused[#RECORDED.focused] == 333
+  end)()
 )
 
 check(
