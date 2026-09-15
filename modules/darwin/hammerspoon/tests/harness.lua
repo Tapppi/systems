@@ -253,6 +253,31 @@ _G.hs = {
       return true
     end,
   },
+  -- The full-screen fallback reads Spaces and the window server's owner list.
+  -- Default: one ordinary Space, so nothing is full-screen and nothing is read.
+  spaces = {
+    allSpaces = function()
+      if _G.SPACES_RAISE then
+        error("spaces unavailable")
+      end
+      return _G.SPACES or { ["screen-1"] = { 1 } }
+    end,
+    spaceType = function(id)
+      return (_G.SPACE_TYPES or {})[id] or "user"
+    end,
+    windowsForSpace = function(id)
+      return (_G.SPACE_WINDOWS or {})[id] or {}
+    end,
+    gotoSpace = function(id)
+      recorded.wentToSpace = id
+      return true
+    end,
+  },
+  execute = function(command)
+    recorded.executed = (recorded.executed or 0) + 1
+    recorded.lastExecuted = command
+    return _G.EXECUTE_OUTPUT or "", true
+  end,
   reload = function()
     recorded.reloaded = (recorded.reloaded or 0) + 1
   end,

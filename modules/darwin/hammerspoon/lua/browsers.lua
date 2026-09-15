@@ -282,6 +282,10 @@ function M.toggle(target, layoutFn)
         M.launch(target, nil)
       end,
       layout = layoutFn,
+      byAppAlone = function()
+        local _, count, known = M.profiles(target.bundle)
+        return not target.profileDir or not known or count <= 1
+      end,
       -- Browsers are typed in, not just clicked, so the layout goes back.
       inputSource = whu.fiProg,
     }

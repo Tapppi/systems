@@ -201,6 +201,8 @@ end
 -- spec.layout       — layoutFn(screen, win) → rect, or nil to never reposition
 -- spec.inputSource  — source ID to switch to on raise, or false
 -- spec.placesNew    — true when something else already positions new windows
+-- spec.byAppAlone() — optional; false when the app's process does not identify
+--                     these windows by itself, as for one browser profile of several
 
 -- Timers for windows that do not exist yet. Held, because hs.timer keeps no
 -- registry and would collect them; keyed by spec.id so a press replaces rather
@@ -257,6 +259,96 @@ local function putAway(windows, focused)
   end
 end
 
+-- ─── Full-screen windows on another Space ─────────────────────────
+-- From any other Space a full-screen window is absent from app:allWindows(),
+-- and hs.window.get() refuses its id. hs.spaces still lists the id, but not who
+-- owns it, and hs.window.list() reports on-screen windows only. The window
+-- server's full list does carry the owner, so it is read through JXA — about
+-- 70ms, and only once a full-screen Space exists and the hotkey found nothing.
+
+local ownersScript = [[
+ObjC.import("CoreGraphics");
+var all = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionAll, 0)));
+all.map(function (w) { return w.kCGWindowNumber + " " + w.kCGWindowOwnerPID; }).join("\n");
+]]
+
+--- Window id → owning pid, for every window the window server knows.
+function M.windowOwners()
+  -- hs.execute goes through sh, so the script is single-quoted and must not
+  -- contain a single quote itself.
+  local out, ok = hs.execute("/usr/bin/osascript -l JavaScript -e '" .. ownersScript .. "'")
+  local owners = {}
+  if not ok or type(out) ~= "string" then
+    return owners
+  end
+  for id, pid in out:gmatch("(%d+) (%d+)") do
+    owners[tonumber(id)] = tonumber(pid)
+  end
+  return owners
+end
+
+local function fullScreenSpaces()
+  local ok, all = pcall(hs.spaces.allSpaces)
+  if not ok or type(all) ~= "table" then
+    return {}
+  end
+  local spaces = {}
+  for _, ids in pairs(all) do
+    for _, id in ipairs(ids) do
+      if hs.spaces.spaceType(id) == "fullscreen" then
+        spaces[#spaces + 1] = id
+      end
+    end
+  end
+  -- pairs() order is undefined; the same press must pick the same Space.
+  table.sort(spaces)
+  return spaces
+end
+
+--- A raise for the spec's full-screen window on another Space, or nil.
+---
+--- Owned by pid, so only a spec whose app alone identifies its windows can use
+--- it: a browser profile sharing a process with another cannot tell which of
+--- them a full-screen window is, and going to the wrong one is worse than a new
+--- window.
+function M.fullScreenWindow(spec)
+  if spec.byAppAlone and not spec.byAppAlone() then
+    return nil
+  end
+  local pids = {}
+  local any = false
+  for _, app in ipairs(hs.application.applicationsForBundleID(spec.bundle) or {}) do
+    local pid = app:pid()
+    if pid then
+      pids[pid] = true
+      any = true
+    end
+  end
+  if not any then
+    return nil
+  end
+
+  local spaces = fullScreenSpaces()
+  if #spaces == 0 then
+    return nil
+  end
+
+  local owners = M.windowOwners()
+  for _, space in ipairs(spaces) do
+    local ok, ids = pcall(hs.spaces.windowsForSpace, space)
+    for _, id in ipairs(ok and ids or {}) do
+      if pids[owners[id]] then
+        return function()
+          -- Goes through Mission Control, which is unavoidable and brief. On
+          -- arrival the window takes focus, so the layout request still applies.
+          hs.spaces.gotoSpace(space)
+        end
+      end
+    end
+  end
+  return nil
+end
+
 function M.toggle(spec)
   -- Every press supersedes a pending launch. Left armed, it would reposition
   -- whichever window the provider lists first when it fires — not necessarily
@@ -267,7 +359,7 @@ function M.toggle(spec)
   local windows = windowsWithFocused(spec, focused)
 
   if #windows == 0 then
-    local elsewhere = M.fullScreenWindow and M.fullScreenWindow(spec)
+    local elsewhere = M.fullScreenWindow(spec)
     if elsewhere then
       elsewhere()
     else
