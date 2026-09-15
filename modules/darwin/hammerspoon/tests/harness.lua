@@ -21,10 +21,11 @@ local recorded = {
   launchOrFocus = {},
   timers = {},
   timersStopped = 0,
+  filters = {},
 }
 _G.RECORDED = recorded
 
---- opts: { visible = false, minimized = true, app = <app stub> }
+--- opts: { visible = false, minimized = true, standard = false, fullScreen = true, app = <app stub> }
 function _G.mkwin(id, title, opts)
   opts = opts or {}
   local minimized = opts.minimized or false
@@ -42,6 +43,9 @@ function _G.mkwin(id, title, opts)
     end,
     isMinimized = function()
       return minimized
+    end,
+    isFullScreen = function()
+      return opts.fullScreen == true
     end,
     -- Chromium gives every window a companion status-bar window. Those are
     -- not standard, have no id and are never minimized, so a fixture needs to
@@ -74,9 +78,21 @@ function _G.mkwin(id, title, opts)
 end
 
 --- An application owning a fixed set of windows.
-function _G.mkapp(windows)
+---
+--- opts: { bundle = <id>, name = <app:name()>, main = <window> }
+function _G.mkapp(windows, opts)
+  opts = opts or {}
   local app
   app = {
+    bundleID = function()
+      return opts.bundle
+    end,
+    name = function()
+      return opts.name
+    end,
+    mainWindow = function()
+      return opts.main
+    end,
     allWindows = function()
       return windows
     end,
@@ -94,6 +110,9 @@ function _G.mkapp(windows)
     end,
     unhide = function()
       recorded.unhidden = (recorded.unhidden or 0) + 1
+    end,
+    pid = function()
+      return opts.pid
     end,
   }
   for _, w in ipairs(windows) do
@@ -119,6 +138,8 @@ _G.STAT = {}
 _G.JSON = {}
 _G.PATHS = {}
 _G.FOCUSED = nil
+_G.NOW = 1000
+_G.SOURCE = "com.apple.keylayout.US"
 
 _G.hs = {
   fs = {
@@ -161,25 +182,31 @@ _G.hs = {
       windowFocused = "windowFocused",
       windowNotVisible = "windowNotVisible",
       windowCreated = "windowCreated",
-      new = function()
-        local f = {}
-        function f:subscribe()
+      new = function(arg)
+        local f = { arg = arg, subscribed = {} }
+        function f:subscribe(event, fn)
+          self.subscribed[event] = fn
           return self
         end
         function f:setAppFilter()
           return self
         end
+        recorded.filters[#recorded.filters + 1] = f
         return f
       end,
     },
   },
+  -- Stateful, so a test can tell the layout the user was in apart from the one
+  -- a handler switched to.
   keycodes = {
     currentSourceID = function(set)
       if set then
         recorded.inputSource = set
+        recorded.inputSourceSets = (recorded.inputSourceSets or 0) + 1
+        _G.SOURCE = set
         return nil
       end
-      return "com.apple.keylayout.US"
+      return _G.SOURCE
     end,
   },
   notify = {
@@ -275,6 +302,9 @@ _G.hs = {
     end,
   },
   timer = {
+    secondsSinceEpoch = function()
+      return _G.NOW
+    end,
     -- Records enough to assert that a timer was cancelled, not merely that one
     -- was created. dismiss() stopping the timeout timer is the property that
     -- keeps a modal from outliving its alert, so a stub whose stop() does
