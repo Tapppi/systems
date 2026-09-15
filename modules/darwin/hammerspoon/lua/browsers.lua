@@ -230,14 +230,29 @@ end
 
 -- ─── Launching ────────────────────────────────────────────────────
 
+--- Whether a target's browser takes --incognito: the Chromium family, which is
+--- what M.localState lists.
+function M.canIncognito(target)
+  return M.localState[target.bundle] ~= nil
+end
+
 --- Open a URL, or the profile itself when url is nil.
-function M.launch(target, url)
+---
+--- opts.incognito — in a private window of the target's profile, where the
+--- browser supports it. A policy that disables Incognito for a managed profile
+--- makes Chromium open an ordinary window instead.
+function M.launch(target, url, opts)
   local args = {}
+  local incognito = opts and opts.incognito and M.canIncognito(target)
+  -- Chromium reads switches back out of its own argv, and a running instance
+  -- is handed the whole argv through its process singleton, so both apply to
+  -- the browser already open.
+  local switches = target.profileDir or incognito
 
   -- --args applies only to a new instance, which is what -n requests. Without
   -- it the profile switch and the URL are both dropped. It belongs nowhere
   -- else: on a plain launch it forces a real second copy of the browser.
-  if target.profileDir then
+  if switches then
     args[#args + 1] = "-n"
   end
 
@@ -250,9 +265,14 @@ function M.launch(target, url)
     args[#args + 1] = target.bundle
   end
 
-  if target.profileDir then
+  if switches then
     args[#args + 1] = "--args"
-    args[#args + 1] = "--profile-directory=" .. target.profileDir
+    if target.profileDir then
+      args[#args + 1] = "--profile-directory=" .. target.profileDir
+    end
+    if incognito then
+      args[#args + 1] = "--incognito"
+    end
     if url then
       args[#args + 1] = url
     end
