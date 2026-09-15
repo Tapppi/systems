@@ -317,6 +317,14 @@ Two behaviours are choices rather than consequences, and either could reasonably
   A dropped link is invisible and leaves the user with nothing; reorder `local.browsers.targets` to change which
   target that is.
 
+**Shift with a target's key opens the links in a private window of that profile** — `--incognito` beside
+`--profile-directory`, which a running Chromium honours because its process singleton forwards the whole argv. It is
+bound only for the Chromium family (the bundles `M.localState` lists); elsewhere shift is unbound rather than opening
+an ordinary window that looks like a private one. A policy that disables Incognito for a managed profile makes
+Chromium open an ordinary window, and that is the browser's call. A private window's title ends `(Incognito)` or
+`(Private)` rather than a profile name, so the profile's hotkey does not count it as the profile's: with only a
+private window open, the hotkey opens an ordinary one.
+
 ### Two limits worth knowing before debugging one of them
 
 **Window lookup only sees the current Mission Control Space.** `app:allWindows()` is documented as returning only

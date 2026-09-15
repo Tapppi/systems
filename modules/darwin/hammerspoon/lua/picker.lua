@@ -47,12 +47,12 @@ local function drain()
   return urls
 end
 
-local function choose(target)
+local function choose(target, incognito)
   -- Dismiss before launching: releasing the keyboard matters more than the
   -- link, and a failure below must not leave the modal entered.
   dismiss()
   for _, url in ipairs(drain()) do
-    browsers.launch(target, url)
+    browsers.launch(target, url, { incognito = incognito })
   end
 end
 
@@ -80,6 +80,12 @@ local function offer()
   local rows = {}
   for _, target in ipairs(browsers.targets) do
     rows[#rows + 1] = target.key .. "   " .. browsers.label(target)
+  end
+  for _, target in ipairs(browsers.targets) do
+    if browsers.canIncognito(target) then
+      rows[#rows + 1] = "⇧key  private window"
+      break
+    end
   end
   if #state.queue > 1 then
     rows[#rows + 1] = ""
@@ -134,8 +140,15 @@ function M.setup()
 
   for _, target in ipairs(browsers.targets) do
     state.modal:bind({}, target.key, function()
-      choose(target)
+      choose(target, false)
     end)
+    -- Only where it can be honoured: shift on a browser with no private-window
+    -- switch would open an ordinary window that looks like a private one.
+    if browsers.canIncognito(target) then
+      state.modal:bind({ "shift" }, target.key, function()
+        choose(target, true)
+      end)
+    end
   end
 
   state.modal:bind({}, "escape", function()

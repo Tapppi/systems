@@ -706,11 +706,63 @@ check(
   end)()
 )
 
+print("private windows")
+check(
+  "an incognito launch passes the switch beside the profile, ahead of the url",
+  (function()
+    PATHS["com.google.Chrome"] = "/Applications/Google Chrome.app"
+    browsers.launch(company, "https://example.com/p", { incognito = true })
+    local l = RECORDED.launches[#RECORDED.launches]
+    local joined = table.concat(l.args, " ")
+    return l.args[1] == "-n"
+      and joined:find("%-%-args %-%-profile%-directory=Profile 1 %-%-incognito https://example.com/p$") ~= nil
+  end)(),
+  table.concat(RECORDED.launches[#RECORDED.launches].args, " ")
+)
+check(
+  "an ordinary launch carries no incognito switch",
+  (function()
+    browsers.launch(company, "https://example.com/o")
+    local l = RECORDED.launches[#RECORDED.launches]
+    return table.concat(l.args, " "):find("incognito") == nil
+  end)()
+)
+check(
+  "a browser with no private-window switch opens normally rather than dropping the link",
+  (function()
+    PATHS["com.apple.Safari"] = "/Applications/Safari.app"
+    local safari = { bundle = "com.apple.Safari", label = "Safari" }
+    browsers.launch(safari, "https://example.com/safari", { incognito = true })
+    local l = RECORDED.launches[#RECORDED.launches]
+    local joined = table.concat(l.args, " ")
+    -- --args would hand the url to Safari as argv, which it never opens.
+    return browsers.canIncognito(safari) == false
+      and joined:find("incognito") == nil
+      and joined:find("%-%-args") == nil
+      and l.args[#l.args] == "https://example.com/safari"
+  end)()
+)
+check(
+  "a profile-less Chromium target still reaches incognito through -n and --args",
+  (function()
+    local anyBrave = { bundle = "com.brave.Browser", label = "Brave" }
+    browsers.launch(anyBrave, "https://example.com/b", { incognito = true })
+    local l = RECORDED.launches[#RECORDED.launches]
+    local joined = table.concat(l.args, " ")
+    return l.args[1] == "-n" and joined:find("%-%-args %-%-incognito https://example.com/b$") ~= nil
+  end)(),
+  table.concat(RECORDED.launches[#RECORDED.launches].args, " ")
+)
+
 print("picker")
 local picker = require("picker")
 picker.setup()
 check("binds one plain key per target", RECORDED.binds["b"] and RECORDED.binds["v"] and RECORDED.binds["c"] ~= nil)
 check("binds escape", RECORDED.binds["escape"] ~= nil)
+check(
+  "binds shift beside every key whose browser has private windows",
+  RECORDED.binds["shift+b"] ~= nil and RECORDED.binds["shift+v"] ~= nil and RECORDED.binds["shift+c"] ~= nil
+)
 
 picker.present("https://one.example")
 check("shows an alert for the first link", #RECORDED.alerts == 1)
@@ -736,6 +788,8 @@ picker.present("https://two.example")
 check("a second link reopens the alert", #RECORDED.alerts == 2)
 check("a second link does not re-enter the modal", RECORDED.entered == 1, "entered=" .. RECORDED.entered)
 check("a second link shows the queue depth", RECORDED.alerts[2]:find("2 links queued") ~= nil, RECORDED.alerts[2])
+
+check("the rows say shift opens a private window", RECORDED.alerts[2]:find("private window") ~= nil, RECORDED.alerts[2])
 
 local before = #RECORDED.launches
 local exitedBefore = RECORDED.exited
@@ -791,6 +845,26 @@ check(
     browsers.targets = saved
     -- Raising is what reaches the stub's hard-coded openURLWithBundle fallback.
     return ok == false
+  end)()
+)
+
+check(
+  "shift opens every queued link privately, and the plain key does not",
+  (function()
+    picker.present("https://private-one.example")
+    picker.present("https://private-two.example")
+    local base = #RECORDED.launches
+    RECORDED.binds["shift+v"]()
+    local private = #RECORDED.launches == base + 2
+    for i = base + 1, #RECORDED.launches do
+      if table.concat(RECORDED.launches[i].args, " "):find("%-%-incognito") == nil then
+        private = false
+      end
+    end
+    picker.present("https://plain.example")
+    RECORDED.binds["v"]()
+    local plain = table.concat(RECORDED.launches[#RECORDED.launches].args, " "):find("incognito") == nil
+    return private and plain
   end)()
 )
 

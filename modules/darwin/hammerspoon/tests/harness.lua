@@ -351,8 +351,11 @@ _G.hs = {
     modal = {
       new = function()
         local modal = {}
-        function modal:bind(_mods, key, fn)
-          recorded.binds[key] = fn
+        function modal:bind(mods, key, fn)
+          -- Modifiers are part of the name, so a shifted binding cannot
+          -- overwrite the plain one it sits beside.
+          local prefix = (mods and #mods > 0) and (table.concat(mods, "+") .. "+") or ""
+          recorded.binds[prefix .. key] = fn
           return self
         end
         function modal:enter()
