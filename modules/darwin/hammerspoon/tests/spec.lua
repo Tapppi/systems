@@ -271,7 +271,7 @@ print("one toggle for apps and profiles")
 --- bindings init.lua makes later.
 local function appHotkey(key, bundle, windows, opts)
   opts = opts or {}
-  local app = mkapp(windows, { bundle = bundle, name = opts.name, main = opts.main })
+  local app = mkapp(windows, { bundle = bundle, name = opts.name, main = opts.main, pid = opts.pid })
   APPS[bundle] = { app }
   local spec = whu.bindToggle(key, bundle, opts.layout, opts.bind)
   return spec, app
@@ -489,6 +489,110 @@ check(
     return raised and (RECORDED.hidden or 0) == hiddenBefore + 1
   end)(),
   "a minimized-only app used to fall through to launchOrFocus"
+)
+
+print("full-screen windows on another Space")
+
+--- One ordinary Space and one full-screen Space holding window 900, owned by
+--- pid 77.
+local function fullScreenSpace()
+  SPACES = { ["screen-1"] = { 1, 50 } }
+  SPACE_TYPES = { [50] = "fullscreen" }
+  SPACE_WINDOWS = { [50] = { 899, 900 } }
+  EXECUTE_OUTPUT = "12 5\n900 77\n899 3\n"
+end
+
+local function noFullScreenSpace()
+  SPACES, SPACE_TYPES, SPACE_WINDOWS, EXECUTE_OUTPUT = nil, nil, nil, nil
+end
+
+check(
+  "no owner lookup runs unless a full-screen Space exists",
+  (function()
+    noFullScreenSpace()
+    local executedBefore = RECORDED.executed or 0
+    local launchesBefore = #RECORDED.launchOrFocus
+    FOCUSED = nil
+    whu.toggle(appHotkey("t11", "com.example.Plain", {}, { pid = 77 }))
+    return (RECORDED.executed or 0) == executedBefore and #RECORDED.launchOrFocus == launchesBefore + 1
+  end)(),
+  "the lookup spawns osascript, so the common launch must not pay for it"
+)
+
+check(
+  "an app's full-screen window elsewhere is gone to, not duplicated",
+  (function()
+    fullScreenSpace()
+    RECORDED.wentToSpace = nil
+    local launchesBefore = #RECORDED.launchOrFocus
+    local timersBefore = #RECORDED.timers
+    FOCUSED = nil
+    whu.toggle(appHotkey("t12", "com.example.FullElsewhere", {}, { pid = 77, layout = noLayout }))
+    noFullScreenSpace()
+    -- No reposition either: a full-screen window has no frame to set.
+    return RECORDED.wentToSpace == 50 and #RECORDED.launchOrFocus == launchesBefore and #RECORDED.timers == timersBefore
+  end)()
+)
+
+check(
+  "the owner lookup survives sh's single quotes",
+  (function()
+    -- hs.execute runs through sh. A quote inside the script ends the argument
+    -- early, osascript gets half a program, and every lookup finds no owner.
+    local command = RECORDED.lastExecuted or ""
+    local _, quotes = command:gsub("'", "")
+    return quotes == 2 and command:find("^/usr/bin/osascript %-l JavaScript %-e '") ~= nil
+  end)(),
+  tostring(RECORDED.lastExecuted)
+)
+
+check(
+  "a full-screen Space owned by some other process is not gone to",
+  (function()
+    fullScreenSpace()
+    RECORDED.wentToSpace = nil
+    local launchesBefore = #RECORDED.launchOrFocus
+    FOCUSED = nil
+    whu.toggle(appHotkey("t13", "com.example.NotOwner", {}, { pid = 78 }))
+    noFullScreenSpace()
+    return RECORDED.wentToSpace == nil and #RECORDED.launchOrFocus == launchesBefore + 1
+  end)()
+)
+
+check(
+  "one profile of several never goes to a full-screen window it cannot attribute",
+  (function()
+    -- Chrome's process owns both profiles' windows, so the pid says nothing
+    -- about which profile a full-screen one is.
+    fullScreenSpace()
+    RECORDED.wentToSpace = nil
+    APPS["com.google.Chrome"] = { mkapp({}, { bundle = "com.google.Chrome", pid = 77 }) }
+    FOCUSED = nil
+    local launchesBefore = #RECORDED.launches
+    browsers.toggle(company, nil)
+    local multi = RECORDED.wentToSpace == nil and #RECORDED.launches == launchesBefore + 1
+
+    -- Brave knows one profile, so its process does identify the window.
+    APPS["com.brave.Browser"] = { mkapp({}, { bundle = "com.brave.Browser", pid = 77 }) }
+    browsers.toggle(personal, nil)
+    noFullScreenSpace()
+    return multi and RECORDED.wentToSpace == 50
+  end)()
+)
+
+check(
+  "a Spaces failure falls back to launching",
+  (function()
+    fullScreenSpace()
+    SPACES_RAISE = true
+    local launchesBefore = #RECORDED.launchOrFocus
+    FOCUSED = nil
+    local ok = pcall(whu.toggle, appHotkey("t14", "com.example.SpacesDown", {}, { pid = 77 }))
+    SPACES_RAISE = nil
+    noFullScreenSpace()
+    return ok and #RECORDED.launchOrFocus == launchesBefore + 1
+  end)(),
+  "hs.spaces rests on private APIs; a raise there must not kill the hotkey"
 )
 
 check(
