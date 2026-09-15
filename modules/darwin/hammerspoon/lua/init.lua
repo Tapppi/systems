@@ -44,8 +44,17 @@ focusFilter:subscribe(hs.window.filter.windowFocused, function(win)
     return
   end
 
-  if forceUSApps[app:name()] then
+  -- Read here rather than set by the hotkey, so the handler sees the layout the
+  -- user was actually in and can record it for the way back.
+  local wanted = whu.claimInputSource(app)
+
+  if forceUSApps[app:name()] or wanted == whu.us then
     activateUSLayout()
+  elseif wanted then
+    -- Leaving the forced state by a hotkey that names its own layout: there is
+    -- nothing to return to afterwards.
+    previousSourceID = nil
+    whu.setInputSource(wanted)
   else
     restorePreviousLayout()
   end

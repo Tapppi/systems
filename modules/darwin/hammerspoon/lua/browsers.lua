@@ -172,6 +172,21 @@ end
 --- get() returns only one of them.
 local warned = {}
 
+local function belongs(target, win, profiles, count, known)
+  -- Chromium's companion status-bar windows have no id and are never
+  -- minimized, so an unfiltered list makes the hotkey dead whenever the real
+  -- window is.
+  if not win:isStandard() then
+    return false
+  end
+  if not target.profileDir or not known or count <= 1 then
+    -- Nothing to distinguish: no profile asked for, no profile list readable,
+    -- or the browser knows only one and so labels nothing.
+    return true
+  end
+  return profileForTitle(profiles, win:title() or "") == target.profileDir
+end
+
 function M.windowsFor(target)
   local profiles, count, known = M.profiles(target.bundle)
   local matched = {}
@@ -185,22 +200,22 @@ function M.windowsFor(target)
 
   for _, app in ipairs(hs.application.applicationsForBundleID(target.bundle) or {}) do
     for _, win in ipairs(app:allWindows()) do
-      -- Chromium's companion status-bar windows have no id and are never
-      -- minimized, so an unfiltered list makes the hotkey dead whenever the
-      -- real window is.
-      if win:isStandard() then
-        if not target.profileDir or not known or count <= 1 then
-          -- Nothing to distinguish: no profile asked for, no profile list
-          -- readable, or the browser knows only one and so labels nothing.
-          matched[#matched + 1] = win
-        elseif profileForTitle(profiles, win:title() or "") == target.profileDir then
-          matched[#matched + 1] = win
-        end
+      if belongs(target, win, profiles, count, known) then
+        matched[#matched + 1] = win
       end
     end
   end
 
   return matched
+end
+
+--- Whether a window found some other way — the focused one — is this target's.
+function M.owns(target, win)
+  local app = win and win:application()
+  if not app or app:bundleID() ~= target.bundle then
+    return false
+  end
+  return belongs(target, win, M.profiles(target.bundle))
 end
 
 -- ─── Launching ────────────────────────────────────────────────────
@@ -245,91 +260,34 @@ end
 
 -- ─── Toggling ─────────────────────────────────────────────────────
 
--- Timers for windows that do not exist yet, held so they are not collected
--- before they fire. Keyed by target so a repeated press replaces rather than
--- stacks.
-M._pending = {}
+-- One spec per target, built once, so its pending launch timer is keyed the
+-- same on every press.
+local specs = {}
 
 --- Focus this profile's window, or put it away if it already has focus.
----
---- Hiding takes every profile of the browser with it, so it is used only when
---- nothing else of that app is visible; otherwise just this window minimizes.
 function M.toggle(target, layoutFn)
-  local windows = M.windowsFor(target)
-  if #windows == 0 then
-    -- No setInputSource: launching is asynchronous, so it would land while the
-    -- app being typed in still holds focus. Tracked in SYSMI-63.
-    M.launch(target, nil)
-
-    -- The window does not exist yet, so position it once the launch produces
-    -- one. Held, because hs.timer keeps no registry and would collect it.
-    if layoutFn then
-      -- The old timer stays armed otherwise, and its callback would clear the
-      -- slot out from under its replacement.
-      local previous = M._pending[target.key]
-      if previous then
-        previous:stop()
-      end
-      local timer
-      timer = hs.timer.doAfter(1.5, function()
-        if M._pending[target.key] == timer then
-          M._pending[target.key] = nil
-        end
-        local win = M.windowsFor(target)[1]
-        if win then
-          whu.applyLayout(win, layoutFn)
-        end
-      end)
-      M._pending[target.key] = timer
-    end
-    return
+  local spec = specs[target.key]
+  if not spec or spec.target ~= target or spec.layout ~= layoutFn then
+    spec = {
+      target = target,
+      id = "browser:" .. target.key,
+      bundle = target.bundle,
+      windows = function()
+        return M.windowsFor(target)
+      end,
+      owns = function(win)
+        return M.owns(target, win)
+      end,
+      launch = function()
+        M.launch(target, nil)
+      end,
+      layout = layoutFn,
+      -- Browsers are typed in, not just clicked, so the layout goes back.
+      inputSource = whu.fiProg,
+    }
+    specs[target.key] = spec
   end
-
-  local focused = hs.window.focusedWindow()
-  if whu.containsWindow(windows, focused) then
-    local app = focused:application()
-    local othersVisible = false
-    if app then
-      for _, w in ipairs(app:visibleWindows()) do
-        if not whu.containsWindow(windows, w) then
-          othersVisible = true
-          break
-        end
-      end
-    end
-    if app and not othersVisible then
-      app:hide()
-    else
-      focused:minimize()
-    end
-    return
-  end
-
-  local win = windows[1]
-  for _, w in ipairs(windows) do
-    if w:isVisible() then
-      win = w
-      break
-    end
-  end
-
-  local app = win:application()
-  if app then
-    app:unhide()
-  end
-
-  -- allWindows() counts minimized windows, so without this every later press
-  -- finds one, skips the launch, and focuses what the window server will not
-  -- raise. win:focus() does not deminiaturize.
-  if win:isMinimized() then
-    win:unminimize()
-  end
-
-  whu.applyLayout(win, layoutFn)
-  win:focus()
-
-  -- Browsers are typed in, not just clicked, so the layout goes back.
-  whu.setInputSource(whu.fiProg)
+  whu.toggle(spec)
 end
 
 return M

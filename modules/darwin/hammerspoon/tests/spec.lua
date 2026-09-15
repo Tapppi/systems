@@ -264,6 +264,255 @@ check(
   end)()
 )
 
+print("one toggle for apps and profiles")
+
+--- An app hotkey under test, with its app registered the way hs.application.get
+--- would find it. Keys are not real hotkeys, so nothing here collides with the
+--- bindings init.lua makes later.
+local function appHotkey(key, bundle, windows, opts)
+  opts = opts or {}
+  local app = mkapp(windows, { bundle = bundle, name = opts.name, main = opts.main })
+  APPS[bundle] = { app }
+  local spec = whu.bindToggle(key, bundle, opts.layout, opts.bind)
+  return spec, app
+end
+
+local noLayout = function()
+  return { x = 0, y = 0, w = 1, h = 1 }
+end
+
+check(
+  "a press changes no input source itself",
+  (function()
+    -- Set at press time the layout lands under the app still being typed in,
+    -- and ahead of windowFocused, which then records the forced layout as the
+    -- one to go back to.
+    SOURCE = whu.fiProg
+    local setsBefore = RECORDED.inputSourceSets or 0
+    local spec = appHotkey("t1", "com.example.Launch", {}, { layout = noLayout })
+    FOCUSED = nil
+    whu.toggle(spec)
+    local raiseWin = mkwin(301, "raise")
+    local raiseSpec = appHotkey("t2", "com.example.Raise", { raiseWin }, { main = raiseWin })
+    whu.toggle(raiseSpec)
+    return (RECORDED.inputSourceSets or 0) == setsBefore
+  end)()
+)
+
+check(
+  "a raised window's layout waits for its focus, and a different app's focus leaves it waiting",
+  (function()
+    NOW = 2000
+    local win = mkwin(302, "w")
+    local spec, app = appHotkey("t3", "com.example.Wait", { win }, { main = win })
+    whu.toggle(spec)
+    local other = mkapp({}, { bundle = "com.example.Other" })
+    local early = whu.claimInputSource(other)
+    local claimed = whu.claimInputSource(app)
+    local again = whu.claimInputSource(app)
+    return early == nil and claimed == whu.fiProg and again == nil
+  end)(),
+  "only the focus the press was waiting for consumes it"
+)
+
+check(
+  "a layout request expires rather than applying to some later click",
+  (function()
+    NOW = 3000
+    local app = mkapp({}, { bundle = "com.example.Stale" })
+    whu.requestInputSource("com.example.Stale", whu.us)
+    NOW = 3000 + whu.intentTTL + 1
+    return whu.claimInputSource(app) == nil
+  end)()
+)
+
+check(
+  "the input-source retry is held, and a later set stops the earlier retry",
+  (function()
+    local base = #RECORDED.timers
+    whu.setInputSource(whu.us)
+    local first = RECORDED.timers[base + 1]
+    whu.setInputSource(whu.fiProg)
+    local second = RECORDED.timers[base + 2]
+    return first ~= nil
+      and second ~= nil
+      and whu._inputRetry == second
+      and first.stopped == true
+      and second.stopped == false
+  end)(),
+  "an unheld retry is collectable; an unstopped one re-asserts a superseded layout"
+)
+
+check(
+  "an app launch's reposition timer is held",
+  (function()
+    local spec = appHotkey("t4", "com.example.Held", {}, { layout = noLayout })
+    FOCUSED = nil
+    local base = #RECORDED.timers
+    whu.toggle(spec)
+    local timer = RECORDED.timers[base + 1]
+    return timer ~= nil and timer.seconds == 1.5 and whu._pending[spec.id] == timer
+  end)(),
+  "unreferenced, a collection inside the delay loses the positioning"
+)
+
+check(
+  "no reposition timer when nothing would be positioned",
+  (function()
+    local base = #RECORDED.timers
+    FOCUSED = nil
+    whu.toggle(appHotkey("t5", "com.example.NoLayout", {}, {}))
+    local watched = appHotkey("t6", "com.example.Watched", {}, { layout = noLayout, bind = { watchCreate = true } })
+    whu.toggle(watched)
+    -- The watchCreate filter positions every new window; a timer as well would
+    -- move it a second time, 1.5s after the user may have moved it.
+    return #RECORDED.timers == base
+  end)()
+)
+
+check(
+  "any later press cancels a pending launch reposition",
+  (function()
+    local win = mkwin(303, "arrived")
+    local spec, app = appHotkey("t7", "com.example.Cancel", {}, { layout = noLayout })
+    FOCUSED = nil
+    local base = #RECORDED.timers
+    whu.toggle(spec)
+    local timer = RECORDED.timers[base + 1]
+    -- The window has arrived; the second press takes the raise path, and the
+    -- armed timer would otherwise reposition whatever is listed first.
+    APPS["com.example.Cancel"] = { mkapp({ win }, { bundle = "com.example.Cancel", main = win }) }
+    whu.toggle(spec)
+    local _ = app
+    return timer ~= nil and timer.stopped == true and whu._pending[spec.id] == nil
+  end)()
+)
+
+check(
+  "a browser profile's pending launch is cancelled by a press that focuses",
+  (function()
+    local layout = noLayout
+    APPS["com.brave.Browser"] = {}
+    FOCUSED = nil
+    local base = #RECORDED.timers
+    browsers.toggle(personal, layout)
+    local timer = RECORDED.timers[base + 1]
+    APPS["com.brave.Browser"] = { mkapp({ mkwin(304, "new - Brave") }, { bundle = "com.brave.Browser" }) }
+    browsers.toggle(personal, layout)
+    return timer ~= nil and timer.stopped == true
+  end)()
+)
+
+check(
+  "a browser launch asks for the typing layout too",
+  (function()
+    NOW = 4000
+    APPS["com.google.Chrome"] = {}
+    FOCUSED = nil
+    browsers.toggle(company, nil)
+    return whu.claimInputSource(mkapp({}, { bundle = "com.google.Chrome" })) == whu.fiProg
+  end)(),
+  "the launch path used to skip it, leaving browsers inconsistent with apps"
+)
+
+check(
+  "a focused window the enumeration misses is put away, not duplicated",
+  (function()
+    -- A full-screen window drops out of allWindows() while focusedWindow()
+    -- still returns it.
+    local full = mkwin(305, "full", { fullScreen = true })
+    local spec, app = appHotkey("t8", "com.example.Full", {}, {})
+    full._setApp(app)
+    FOCUSED = full
+    local launchesBefore = #RECORDED.launchOrFocus
+    local hiddenBefore = RECORDED.hidden or 0
+    whu.toggle(spec)
+    return #RECORDED.launchOrFocus == launchesBefore and (RECORDED.hidden or 0) == hiddenBefore + 1
+  end)()
+)
+
+check(
+  "a full-screen window hides even beside another visible window",
+  (function()
+    -- It cannot minimize, so the minimize branch would do nothing at all.
+    local full = mkwin(306, "Page - Google Chrome - Tapani (acme.example)", { fullScreen = true })
+    local theirs = mkwin(307, "Other - Google Chrome - Tapani (Client Co)")
+    APPS["com.google.Chrome"] = { mkapp({ theirs, full }, { bundle = "com.google.Chrome" }) }
+    FOCUSED = full
+    local hiddenBefore = RECORDED.hidden or 0
+    local minimizedBefore = #RECORDED.minimized
+    browsers.toggle(company, nil)
+    return (RECORDED.hidden or 0) == hiddenBefore + 1 and #RECORDED.minimized == minimizedBefore
+  end)()
+)
+
+check(
+  "a companion window does not count as another profile's",
+  (function()
+    local mine = mkwin(308, "only - Brave")
+    local helper = mkwin(nil, "only - Brave", { standard = false })
+    APPS["com.brave.Browser"] = { mkapp({ mine, helper }, { bundle = "com.brave.Browser" }) }
+    FOCUSED = mine
+    local hiddenBefore = RECORDED.hidden or 0
+    local minimizedBefore = #RECORDED.minimized
+    browsers.toggle(personal, nil)
+    return (RECORDED.hidden or 0) == hiddenBefore + 1 and #RECORDED.minimized == minimizedBefore
+  end)(),
+  "its nil id never matches, so it would always force a minimize"
+)
+
+check(
+  "a focused window of another profile is not claimed",
+  (function()
+    local theirs = mkwin(309, "Other - Google Chrome - Tapani (Client Co)")
+    mkapp({ theirs }, { bundle = "com.google.Chrome" })
+    local wrongBundle = mkwin(310, "x - Tapani (acme.example)")
+    mkapp({ wrongBundle }, { bundle = "com.example.NotChrome" })
+    return browsers.owns(company, theirs) == false
+      and browsers.owns(client, theirs) == true
+      and browsers.owns(company, wrongBundle) == false
+  end)()
+)
+
+check(
+  "an app hotkey puts its focused window away and raises otherwise",
+  (function()
+    local win = mkwin(311, "slack", { minimized = true })
+    local spec = appHotkey("t9", "com.example.Chat", { win }, {})
+    FOCUSED = nil
+    local unminBefore = #RECORDED.unminimized
+    whu.toggle(spec)
+    local raised = #RECORDED.unminimized == unminBefore + 1 and RECORDED.focused[#RECORDED.focused] == 311
+    FOCUSED = win
+    local hiddenBefore = RECORDED.hidden or 0
+    whu.toggle(spec)
+    return raised and (RECORDED.hidden or 0) == hiddenBefore + 1
+  end)(),
+  "a minimized-only app used to fall through to launchOrFocus"
+)
+
+check(
+  "new windows are matched by bundle id, not by the name LaunchServices reports",
+  (function()
+    -- nameForBundleID says "Chrome" where app:name() says "Google Chrome"; a
+    -- filter built from the first matches no window at all.
+    NAMES["com.example.Named"] = "Short"
+    local filtersBefore = #RECORDED.filters
+    appHotkey("t10", "com.example.Named", {}, { layout = noLayout, bind = { watchCreate = true } })
+    local filter = RECORDED.filters[filtersBefore + 1]
+    if not filter or type(filter.arg) ~= "function" then
+      return false
+    end
+    local win = mkwin(312, "term")
+    mkapp({ win }, { bundle = "com.example.Named", name = "Long Name" })
+    local stranger = mkwin(313, "term")
+    mkapp({ stranger }, { bundle = "com.example.Else", name = "Short" })
+    return filter.arg(win) == true
+      and filter.arg(stranger) == false
+      and filter.subscribed[hs.window.filter.windowCreated] ~= nil
+  end)()
+)
+
 print("launching")
 PATHS["com.google.Chrome"] = "/Applications/Google Chrome.app"
 browsers.launch(company, "https://example.com/x")
@@ -814,6 +1063,55 @@ if loaded then
       end
       return true
     end)()
+  )
+  check(
+    "a hotkey into a US app leaves a way back to the layout it interrupted",
+    (function()
+      -- The stranding: the hotkey used to set US itself, before windowFocused
+      -- ran, so the handler read US as the current layout, recorded nothing,
+      -- and the next focus elsewhere had nothing to restore.
+      local focusFilter
+      for i = #RECORDED.filters, 1, -1 do
+        local f = RECORDED.filters[i]
+        if f.arg == nil and f.subscribed[hs.window.filter.windowFocused] then
+          focusFilter = f
+          break
+        end
+      end
+      if not focusFilter then
+        return false
+      end
+      local focusedHandler = focusFilter.subscribed[hs.window.filter.windowFocused]
+
+      NOW = 5000
+      SOURCE = whu.fiProg
+      local notes = mkwin(401, "vault")
+      local obsidian = mkapp({ notes }, { bundle = "md.obsidian", name = "Obsidian", main = notes })
+      APPS["md.obsidian"] = { obsidian }
+      FOCUSED = nil
+      RECORDED.binds["hyper:j"]()
+      local afterPress = SOURCE
+      focusedHandler(notes)
+      local inObsidian = SOURCE
+
+      local chat = mkwin(402, "general")
+      mkapp({ chat }, { bundle = "com.example.Mail", name = "Mail" })
+      focusedHandler(chat)
+      if not (afterPress == whu.fiProg and inObsidian == whu.us and SOURCE == whu.fiProg) then
+        return false
+      end
+
+      -- And the other half: a hotkey into an app that is not forced still gets
+      -- the layout it names when its window arrives, whatever was active.
+      SOURCE = "com.apple.keylayout.Finnish"
+      local channel = mkwin(403, "channel")
+      local slack = mkapp({ channel }, { bundle = "com.tinyspeck.slackmacgap", name = "Slack", main = channel })
+      APPS["com.tinyspeck.slackmacgap"] = { slack }
+      RECORDED.binds["hyper:k"]()
+      focusedHandler(channel)
+      return SOURCE == whu.fiProg
+    end)(),
+    "SOURCE=" .. tostring(SOURCE)
   )
   check(
     "the browser keys come from the target list",
