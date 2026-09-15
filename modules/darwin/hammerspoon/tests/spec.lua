@@ -314,6 +314,19 @@ local noLayout = function()
   return { x = 0, y = 0, w = 1, h = 1 }
 end
 
+--- Timers armed since `base` with this delay. A press can arm several — the
+--- layout-request check as well as a launch reposition — so position alone does
+--- not say which is which.
+local function timersSince(base, seconds)
+  local found = {}
+  for i = base + 1, #RECORDED.timers do
+    if RECORDED.timers[i].seconds == seconds then
+      found[#found + 1] = RECORDED.timers[i]
+    end
+  end
+  return found
+end
+
 check(
   "a press changes no input source itself",
   (function()
@@ -360,6 +373,57 @@ check(
 )
 
 check(
+  "a request the focus filter missed is applied once its app has focus, and only then",
+  (function()
+    -- windowFocused drops events for windows it does not yet consider visible,
+    -- which a just-unhidden window may not be.
+    local calls = {}
+    local savedOnFocus = whu.onFocus
+    whu.onFocus = function(win)
+      calls[#calls + 1] = win:id()
+      whu.claimInputSource(win:application())
+    end
+    NOW = 6000
+    local base = #RECORDED.timers
+
+    local other = mkwin(320, "elsewhere")
+    mkapp({ other }, { bundle = "com.example.StillTyping" })
+    whu.requestInputSource("com.example.Checked", whu.us)
+    local check1 = timersSince(base, whu.intentCheckDelay)[1]
+    FOCUSED = other
+    check1.fn()
+    local notYet = #calls == 0
+
+    local arrived = mkwin(321, "arrived")
+    mkapp({ arrived }, { bundle = "com.example.Checked" })
+    whu.requestInputSource("com.example.Checked", whu.us)
+    local check2 = timersSince(base, whu.intentCheckDelay)[2]
+    FOCUSED = arrived
+    check2.fn()
+    local applied = #calls == 1 and calls[1] == 321
+
+    -- Already consumed by the filter: the check must not run the policy again.
+    whu.requestInputSource("com.example.Checked", whu.us)
+    local check3 = timersSince(base, whu.intentCheckDelay)[3]
+    whu.claimInputSource(arrived:application())
+    check3.fn()
+    local notTwice = #calls == 1
+
+    local cleared = whu._intentCheck == nil
+    -- Held and replaced: a later press supersedes the earlier check.
+    whu.requestInputSource("com.example.Checked", whu.us)
+    local superseded = whu._intentCheck
+    whu.requestInputSource("com.example.Checked", whu.us)
+    local replaced = superseded ~= nil and superseded.stopped == true and whu._intentCheck ~= superseded
+    whu.claimInputSource(arrived:application())
+
+    whu.onFocus = savedOnFocus
+    return notYet and applied and notTwice and cleared and replaced
+  end)(),
+  "a check that fires early switches the layout under the app still being typed in"
+)
+
+check(
   "the input-source retry is held, and a later set stops the earlier retry",
   (function()
     local base = #RECORDED.timers
@@ -383,8 +447,8 @@ check(
     FOCUSED = nil
     local base = #RECORDED.timers
     whu.toggle(spec)
-    local timer = RECORDED.timers[base + 1]
-    return timer ~= nil and timer.seconds == 1.5 and whu._pending[spec.id] == timer
+    local timer = timersSince(base, 1.5)[1]
+    return timer ~= nil and whu._pending[spec.id] == timer
   end)(),
   "unreferenced, a collection inside the delay loses the positioning"
 )
@@ -399,7 +463,7 @@ check(
     whu.toggle(watched)
     -- The watchCreate filter positions every new window; a timer as well would
     -- move it a second time, 1.5s after the user may have moved it.
-    return #RECORDED.timers == base
+    return #timersSince(base, 1.5) == 0
   end)()
 )
 
@@ -411,7 +475,7 @@ check(
     FOCUSED = nil
     local base = #RECORDED.timers
     whu.toggle(spec)
-    local timer = RECORDED.timers[base + 1]
+    local timer = timersSince(base, 1.5)[1]
     -- The window has arrived; the second press takes the raise path, and the
     -- armed timer would otherwise reposition whatever is listed first.
     APPS["com.example.Cancel"] = { mkapp({ win }, { bundle = "com.example.Cancel", main = win }) }
@@ -429,7 +493,7 @@ check(
     FOCUSED = nil
     local base = #RECORDED.timers
     browsers.toggle(personal, layout)
-    local timer = RECORDED.timers[base + 1]
+    local timer = timersSince(base, 1.5)[1]
     APPS["com.brave.Browser"] = { mkapp({ mkwin(304, "new - Brave") }, { bundle = "com.brave.Browser" }) }
     browsers.toggle(personal, layout)
     return timer ~= nil and timer.stopped == true
@@ -563,7 +627,9 @@ check(
     whu.toggle(appHotkey("t12", "com.example.FullElsewhere", {}, { pid = 77, layout = noLayout }))
     noFullScreenSpace()
     -- No reposition either: a full-screen window has no frame to set.
-    return RECORDED.wentToSpace == 50 and #RECORDED.launchOrFocus == launchesBefore and #RECORDED.timers == timersBefore
+    return RECORDED.wentToSpace == 50
+      and #RECORDED.launchOrFocus == launchesBefore
+      and #timersSince(timersBefore, 1.5) == 0
   end)()
 )
 

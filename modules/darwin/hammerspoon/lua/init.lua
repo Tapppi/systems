@@ -3,8 +3,9 @@ local browsers = require("browsers")
 local picker = require("picker")
 
 -- ─── Per-app US keyboard layout forcing ────────────────────────────
--- A window filter rather than an app watcher: windowFocused also fires for the
--- programmatic focus changes the hotkey toggles make.
+-- A window filter rather than an app watcher, so focus changes within one app
+-- count too. Hotkeys do not switch layouts themselves; they leave a request that
+-- the focus policy below consumes.
 
 local forceUSApps = {
   ["Ghostty"] = true,
@@ -33,12 +34,15 @@ local function restorePreviousLayout()
   end
 end
 
--- new(nil), not new(true): the default filter's visible=true rule keeps
--- Spotlight and Notification Center from restoring the layout mid-session.
--- Both constructors have a failure mode — see the README and SYSMI-63.
+-- new(nil), not new(true): the default filter rejects Spotlight, Notification
+-- Center and the rest of its 30 named transient apps, which would otherwise
+-- restore the layout mid-session. new(true) has no rules at all.
 local focusFilter = hs.window.filter.new(nil)
 
-focusFilter:subscribe(hs.window.filter.windowFocused, function(win)
+-- Idempotent for one focus, because whu may call it again for the same window:
+-- a request is consumed the first time, and forcing or restoring twice changes
+-- nothing.
+whu.onFocus = function(win)
   local app = win:application()
   if not app then
     return
@@ -58,7 +62,9 @@ focusFilter:subscribe(hs.window.filter.windowFocused, function(win)
   else
     restorePreviousLayout()
   end
-end)
+end
+
+focusFilter:subscribe(hs.window.filter.windowFocused, whu.onFocus)
 
 -- windowFocused alone misses a window that disappears without another taking
 -- focus.

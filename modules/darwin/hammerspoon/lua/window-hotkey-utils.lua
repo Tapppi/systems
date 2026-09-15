@@ -42,8 +42,39 @@ end
 M.intentTTL = 10
 local intent = nil
 
+-- What init.lua does when a window takes focus. The windowFocused filter calls
+-- it, and so does the check below; it must be safe to run twice for one focus.
+M.onFocus = nil
+
+-- A second path to the focus policy, held and replaced like the retry. The
+-- windowFocused filter is the first, but it drops events for windows it does not
+-- consider visible, and a window just unhidden may not be yet. A request still
+-- pending once its app has focus is applied from here instead.
+M.intentCheckDelay = 1
+M._intentCheck = nil
+
 function M.requestInputSource(bundleID, sourceID)
   intent = { bundle = bundleID, source = sourceID, at = hs.timer.secondsSinceEpoch() }
+  if M._intentCheck then
+    M._intentCheck:stop()
+  end
+  local timer
+  timer = hs.timer.doAfter(M.intentCheckDelay, function()
+    if M._intentCheck == timer then
+      M._intentCheck = nil
+    end
+    if not M.onFocus or intent == nil or intent.bundle ~= bundleID then
+      return
+    end
+    local focused = hs.window.focusedWindow()
+    local app = focused and focused:application()
+    -- Only once the app has focus: applied earlier it would land under whatever
+    -- is still being typed in, which is the defect the request exists to avoid.
+    if app and app:bundleID() == bundleID then
+      M.onFocus(focused)
+    end
+  end)
+  M._intentCheck = timer
 end
 
 --- The layout a hotkey asked for, if this focus is the one it was waiting for.
