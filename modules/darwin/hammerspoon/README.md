@@ -1,428 +1,241 @@
 # Hammerspoon
 
 Hammerspoon holds this Mac's window hotkeys, its per-app keyboard-layout forcing, and the link router that picks a
-browser *profile* for an opened URL.
+browser *profile* for an opened URL. The app, its configuration, the router, the picker and the hotkeys are all
+delivered from here.
 
-## Status
+Claims asserted sharply below were checked against Chromium and Hammerspoon source at the installed versions, this
+machine's TCC database, the pinned nix-darwin revision, or the live machine. Where a claim is hedged, the hedge is the
+finding.
 
-Hammerspoon, its configuration, the link router, the picker and the hotkeys are all delivered from here. Activation
-claims the `http`/`https` handler, so a clicked link reaches the router.
+## Activation and the default browser
 
-Activation calls out before each change it makes, because macOS raises a confirmation dialog on every real change. It
-is not reliably silent when everything already holds: the handler probe runs through `hs.ipc`, which the reload just
-before it tears down and rebuilds, and a failed probe reads as an empty handler — so a run can announce a claim it does
-not need and then wait out a prompt that never comes.
+Activation claims `http`/`https` for Hammerspoon so a clicked link reaches the router, and announces each change first,
+because macOS raises a confirmation dialog for every real one. It is not reliably silent when nothing needs changing:
+the handler probe runs through `hs.ipc`, which the reload just before it rebuilds, and a failed probe reads as an empty
+handler.
 
-**The claim is gated on a Hammerspoon that answers with *this* config**, never on the process merely existing. An
-instance that outlived its `killall` still answers `pgrep` while running the old config, and claiming `http` for one
-that never registered `hs.urlevent.httpCallback` drops every clicked link on the machine with no fallback — strictly
-worse than not claiming at all.
+- **The claim is gated on a Hammerspoon answering with *this* config**, never on the process existing. An instance that
+  outlived its `killall` answers `pgrep` while running the old config, and claiming `http` for one with no
+  `hs.urlevent.httpCallback` drops every clicked link on the machine.
+- **The claim goes through `duti`.** `hs.urlevent.setDefaultHandler` reports success and changes nothing on macOS
+  26.6.2.
+- **`mailto` is not claimed**: `httpCallback` does not serve it, so taking it would drop every `mailto:` link.
 
-**The claim goes through `duti`, not `hs.urlevent.setDefaultHandler`** — the latter reports success and leaves the
-handler unchanged on macOS 26.6.2.
+Hammerspoon's `Info.plist` also declares document types, and they move by UTI, not by extension:
 
-Hammerspoon's `Info.plist` declares `html htm shtml jhtml`, `txt text`, `url`, `xhtml xht xhtm`, `spoon` and `*` as
-document types, all Viewer, and `hammerspoon`, `http`, `https` and `mailto` as URL schemes. Only `http`/`https` are
-claimed; `mailto` is left alone deliberately, since `hs.urlevent.httpCallback` does not serve it and taking it would
-drop every `mailto:` link with no fallback.
+- **Left with Hammerspoon** — `html htm shtml` (one `public.html`). The web types *are* the default-browser identity:
+  moving one offers to change the browser back. A web file opened into Hammerspoon reaches the picker as `file://`.
+- **Claimed** — `xhtml xht xhtm` (one `public.xhtml`), which macOS does not transfer with `http`. The claim raises its
+  own dialog the first time and `duti` returns before it is answered. `jhtml` is a dynamic UTI `duti` rejects
+  (`error -50`) immediately, which is why the helper checks the exit status before polling.
+- **Put back** — `txt text url`. A `.url` is a shortcut file, not web content.
 
-Extensions are the wrong unit for the document types — UTIs are, and they collapse. `html htm shtml` are one
-`public.html`, which is why taking `http` transfers all three together; `xhtml xht xhtm` are one `public.xhtml`;
-`jhtml` is a *dynamic* UTI. `spoon` was always Hammerspoon's, and `*` claims nothing that resolves — `pdf`, `png`,
-`md` and `json` all still land elsewhere. That leaves three groups and three treatments:
+The restore runs on every non-dry-run activation, with or without a live Hammerspoon, from a snapshot taken at the start
+of the same run. A dialog answered after activation exits still strands its type: the next run sees Hammerspoon as the
+owner and has nothing to restore. That residual is deferred to SYSMI-19, where asserting the full intended associations
+removes it.
 
-- **Left with Hammerspoon** — `html`, `htm`, `shtml`. On macOS the web types **are** the default-browser identity, so
-  moving one asks to change the browser back and accepting that would undo the claim. They need no undoing anyway: a
-  web file opened into Hammerspoon arrives as a `file://` URL and reaches the picker.
-- **Claimed outright** — the `public.xhtml` family, via `.xhtml`. Wanted for the same reason as `html`, but macOS
-  never transfers it: it sat with Chrome. One claim moves `xhtml`, `xht` and `xhtm` together. It is a new default
-  rather than a hand-back, so it raises its own confirmation dialog the first time, and the claim is asynchronous —
-  `duti` returns before the dialog is answered.
-  `jhtml` is **not** claimed. Its dynamic UTI is one `duti` rejects outright (`error -50`), so listing it would
-  re-attempt an impossible claim on every activation. A rejection returns immediately rather than waiting the claim
-  out — that distinction is why the claim helper checks `duti`'s exit status before it starts polling.
-- **Put back** — `txt`, `text`, `url`. A `.url` is a shortcut file rather than web content — the picker hands the
-  browser the file instead of following the link inside it — and `txt`/`text` are not web content at all.
+## Why the app is packaged here
 
-The restore runs on every activation that is not a dry run — including ones where Hammerspoon is not running, or is
-running some other config. It reads and writes LaunchServices through `duti` and needs no live instance, and the
-runs where a type is most likely still stranded are exactly the ones where the claim is skipped. It restores from a
-snapshot taken at the start of the same run, so each claim is waited out before it runs; a prompt answered after
-activation has finished is still not repaired, since the next run sees the type already Hammerspoon's and has nothing
-to put it back to.
+Hammerspoon is not in nixpkgs, so it is packaged from its GitHub release. Nix-installing a GUI app does not break TCC
+here, for narrow reasons:
 
-**Known defects, deliberately left.** The input source is set synchronously right after `win:focus()`, so the async
-`windowFocused` handler never records the previous layout; the layout is also set immediately after
-`launchOrFocusByBundleID`, changing the keyboard under the app still holding focus; the 0.05s retry timer in
-`setInputSource` is unreferenced, so it is both collectable and un-cancellable; `win:setFrame()` runs before
-`app:unhide()` in `bindToggle`, with unverified effect on a hidden window; and `CustomUserPreferences` is write-only,
-so removing this module leaves `MJConfigFile` pointing at a file home-manager has deleted. All tracked in SYSMI-63.
+- The Accessibility grant is keyed by **bundle identifier**. Its `csreq` pins `anchor apple generic`, the bundle id and
+  Team ID `VQCYSNZB89` — no path, no cdhash — so a store-built bundle satisfies it and upgrades do not re-prompt.
+- `system.activationScripts.applications` **rsyncs** bundles into `/Applications/Nix Apps`, so the bundle is a real
+  directory at a stable path. That rsync draws from `environment.systemPackages` only; a `home.packages` app would not
+  be placed at all on this host.
+- **Nothing wraps the executable.** A nix wrapper script in `Contents/MacOS/` hands TCC a store binary — Neovide on this
+  machine is exactly that. Hammerspoon's release bundle is copied whole.
 
-**One open question in code that shipped.** The focus filter's constructor has two candidates that fail in opposite
-directions: `hs.window.filter.new(nil)` copies the default filter, which never fires for `ignoreInDefaultFilter` apps
-or non-standard window roles, so focusing one can leave the keyboard stuck in the forced US layout; `new(true)` drops
-the default entirely, including its `visible=true` rule, so Spotlight and Notification Center begin firing
-`windowFocused` and restore Finnish mid-session. `new(nil)` ships. Neither symptom has been observed, which is what
-makes it a question rather than a bug.
+Two build settings keep the upstream Developer ID signature valid:
 
-**A modal does capture plain letters while another application is frontmost** — measured, with Brave frontmost and
-Hammerspoon not. Worth recording because the obvious instrument lies: `hs.eventtap.keyStroke` reaches event taps but
-bypasses Carbon hotkey dispatch, so a posted key proves nothing. Post at `kCGHIDEventTap` instead. That the modal also
-*swallows* the key is standard `RegisterEventHotKey` behaviour and was not separately measured.
-
-Every non-obvious claim below was verified against primary sources — Chromium and Hammerspoon source at the exact
-installed versions, this machine's TCC database, and the pinned nix-darwin revision. Where something is asserted
-sharply, it is because it was checked; where it is hedged, the hedge is the finding.
-
-## Why the app is packaged here rather than left to Homebrew
-
-Hammerspoon is not in nixpkgs, so it is packaged from its GitHub release. When Homebrew installation migrates to
-`systems`, the packaging and installation mechanism should be re-evaluated.
-
-The usual objection is that nix-installing a macOS GUI app breaks TCC, and Hammerspoon is useless without
-Accessibility. It does not apply to this package, for reasons narrower than "nix is fine now":
-
-- The Accessibility grant is keyed by **bundle identifier**, not path — `client_type=0`, and the `access` table has no
-  path column. Its `csreq` blob pins `anchor apple generic`, the bundle id and Team ID `VQCYSNZB89`, with no path and
-  no cdhash, so a store-built bundle satisfies it and a version bump does not re-prompt.
-- `system.activationScripts.applications` **rsyncs** bundles into `/Applications/Nix Apps` rather than symlinking the
-  folder into the store, so the installed bundle is a real directory at a stable path.
-
-**The bundle must come from `environment.systemPackages`, not `home.packages`.** That rsync draws from system packages
-only. home-manager's own darwin app placement would not help: `copyApps` is disabled on this host and `linkApps`
-defaults off at this `stateVersion`, so a `home.packages` app would be placed by neither mechanism and simply would
-not appear. Config through home-manager, bundle through `environment.systemPackages`.
-
-**The packaging is what makes this TCC-safe, not the activation mechanism.** `--copy-unsafe-links` dereferences the
-store symlink for the *bundle*, but a nix wrapper script inside `Contents/MacOS/` is copied with its store paths
-intact and `exec`s a store binary, which is what TCC then evaluates. Neovide on this machine is exactly that — a real
-rsynced directory whose executable is a 240-byte script running an ad-hoc-signed store binary, with the bundle
-reporting "not signed at all". Hammerspoon is safe because the release bundle is copied whole and nothing wraps it.
-
-Two build settings preserve the upstream Developer ID signature:
-
-- **`dontFixup = true`** — load-bearing. `Contents/Resources/timeout3` is the bundle's only shebang script and it is
-  sealed: `CodeResources` covers it under `^Resources/` with no `omit` and no `optional`. `patchShebangs` would repoint
-  it at a store bash and invalidate that seal, after which `codesign --verify` fails with *a sealed resource is missing
-  or invalid*. Note what this does and does not break: resource hashes live in `CodeResources`, and the CodeDirectory
-  seals that plist, so the signature and the designated requirement survive — it is verification that fails.
-- **`stdenvNoCC`** — defence in depth. nixpkgs' `strip.sh` defaults `stripDebugList` to include `Applications`, but
-  `_doStrip` is reached only through `fixupPhase`, which `dontFixup` already skips. This adds an independent guard (no
-  bintools wrapper, so `$STRIP` is unset) and keeps a C toolchain out of the closure.
+- **`dontFixup = true`** — load-bearing. `Contents/Resources/timeout3` is a sealed shebang script; `patchShebangs`
+  would rewrite it and `codesign --verify` would fail with *a sealed resource is missing or invalid*.
+- **`stdenvNoCC`** — defence in depth: no strip tooling, no C toolchain in the closure.
 
 Never `codesign -s -` this bundle.
 
-## Why the config lives in `~/.config/hammerspoon`
+## Where the config lives
 
-XDG convergence — that is the whole of the reason, and it is sufficient.
+`~/.config/hammerspoon`, for XDG convergence and nothing more. It is not beyond `macos-setup`'s reach: `bootstrap.sh`
+rsyncs `dotfiles/config/` into `~/.config/` with `--force`, so **no `dotfiles/config/hammerspoon/` may ever exist**.
 
-It does **not** put the config beyond `macos-setup`'s reach: `bootstrap.sh` rsyncs `dotfiles/config/` into
-`~/.config/` with `--force`. `~/.config/hammerspoon` survives only because no `dotfiles/config/hammerspoon/` source
-exists. Treat that as a standing constraint — creating one would let `--force` replace the nix-managed entries
-silently.
-
-Hammerspoon relocates via the `MJConfigFile` user default, which is the only supported mechanism — symlinking
-`~/.hammerspoon` is the shape with the open, undiagnosed bug (upstream #3706) and does not vacate the dotfile slot
-anyway.
-
-Four properties of that default govern the layout:
-
-- **It names a file, not a directory.** The value must end in `/init.lua`. Pointing it at the directory moves
-  `hs.configdir` up to `~/.config`.
-- **It is read once**, in `applicationDidFinishLaunching:`. A changed value needs a restart; `hs.reload()` uses the
-  cached C global and will not see it.
-- **`hs.configdir` is the dirname, with no trailing slash.** Every concatenation needs an explicit `/`. The published
-  docs are wrong about this.
-- **It is undocumented, and a prefs-domain reset wipes it.** See "`~/.hammerspoon` must stay gone".
-
-## Layout
+Hammerspoon relocates through the `MJConfigFile` user default. It names a **file** (`…/init.lua`), is read **once** at
+launch (so a change needs a restart, not `hs.reload()`), makes `hs.configdir` its dirname with no trailing slash, and is
+undocumented.
 
 ```text
 ~/.config/hammerspoon/          real directory, three independent entries
 ├── init.lua                    -> /nix/store/…   generated stub, never hand-edited
 ├── lua/                        -> <repo>/modules/darwin/hammerspoon/lua   out-of-store, live-editable
 ├── generated/targets.lua       -> /nix/store/…   from local.browsers.targets
-└── Spoons/                     created by Hammerspoon at every launch; unmanaged, harmless
+└── Spoons/                     created by Hammerspoon at every launch; unmanaged
 ```
 
-**The parent must be a real directory, not one store symlink.** Two reasons, and only the second is fatal: the three
-entries have three independent targets that a single `source =` cannot express, and Hammerspoon's launch-time Spoons
-`mkdir` uses the *symlink-resolved* path — so if the parent were itself the out-of-store symlink, Hammerspoon would
-create `Spoons/` inside the git working tree.
+- **The parent must be a real directory.** Hammerspoon's launch-time `mkdir` of `Spoons/` resolves symlinks, so a
+  symlinked parent would create `Spoons/` inside the git tree.
+- **Nothing named `Spoons` may be anything but a directory.** Hammerspoon `abort()`s at launch otherwise, and only at
+  launch — a bad entry lies dormant through every `hs.reload()`.
+- **Only `lua/` is out of store**, because it is edited live. That is the exception, not the pattern for dotfiles.
 
-**Nothing named `Spoons` may be anything but a directory.** At launch, and only at launch, Hammerspoon probes that path
-with `fileExistsAtPath:isDirectory:` (which follows symlinks) and `abort()`s if it exists and is not a directory. A
-symlink *to* a directory passes. A dangling symlink escapes the check but silently defeats the `mkdir` that follows,
-since the error is discarded. `hs.reload()` repeats none of this, so a bad entry introduced by activation lies dormant
-until the next start rather than failing where it was created.
-
-Only `lua/` is out of store, and only because it is edited live. That is a deliberate exception, not the pattern to
-copy: for most dotfiles, store-managed content *is* the point of the migration, and reaching for `mkOutOfStoreSymlink`
-by default would hollow it out.
-
-### On `package.path`
-
-`setup.lua` builds `package.path` from nine unconditional entries: the three `configdir` templates (`?.lua`,
-`?/init.lua`, `Spoons/?.spoon/init.lua`), the interpreter's existing path, two for the bundle's own `extensions`, and
-three under `~/.local/share/hammerspoon/site` — a genuine user-owned module root added upstream in 2022 for this exact
-problem. We do not use it: it sits outside the repo, so nothing in git would describe its contents.
-
-`configdir/?.lua` is a *template*, and Lua rewrites dots in a module name to `/`, so **`lua/` already works with no
-change**: `require("lua.router")` resolves to `configdir/lua/router.lua`. What `lua/` is not is a path *root* — a bare
-`require("router")` will not find it. The stub prepends both `configdir/lua/?.lua` and `configdir/lua/?/init.lua`, so
-the modules can require each other by bare name and a module can be a directory; that is readability, not a
-precondition.
-
-## The init.lua stub
-
-Generated, and syntax-checked at build time with **`pkgs.lua5_4`'s `luac -p`** — not `pkgs.lua`, which is still
-5.2.4 in the pinned nixpkgs, while Hammerspoon embeds Lua 5.4.7. A 5.2 gate would reject valid 5.3+ syntax (`//`,
-bitwise operators, `<const>`) and accept 5.2-isms Hammerspoon rejects, which matters because this gate is the only
-thing standing between a generated file and the dead-end failure described below. It does five things before loading
-anything that can fail:
-
-1. Registers `hs.urlevent.httpCallback`.
-2. `require("hs.ipc")`, without which `hs -c` cannot reach the running instance. Loading it only opens the port — it
-   does not supply the client, which the package exports as `hs` in `$out/bin`. Activation calls that store path
-   directly rather than resolving `hs` on `PATH`, which is what makes it independent of what else is installed.
-3. Asserts `hs.configdir` matches what nix configured, loudly. Hammerspoon shipped a symlink-resolution regression in
-   0.9.79 that broke sibling `require()`, reverted in 0.9.81, with no regression test guarding it since.
-4. Prepends `configdir/lua/?.lua` and `configdir/lua/?/init.lua` to `package.path`, so modules can require each other
-   by bare name.
-5. Starts the config-reload watcher, held in a global — `hs.pathwatcher` keeps no internal registry, so a watcher
-   referenced only by a local is collected and hot reload stops silently.
-
-Only the hand-edited config is then loaded, and only that load is wrapped in `pcall`. Steps 1-5 are deliberately
-outside it: they are the parts that must survive a broken module, so anything that could throw belongs after them,
-not before.
-
-**The final `require` must use the dotted `lua.init`.** A bare `require("init")` resolves through Hammerspoon's own
-`<configdir>/?.lua` template back to *the stub itself* whenever `lua/init.lua` is missing — and because Hammerspoon
-loads `init.lua` with `loadfile` rather than `require`, `package.loaded` never arms Lua's loop guard. It re-enters
-until the C stack overflows, and the enclosing `pcall` then reports that as success: no hotkeys, no error, and one
-live path watcher per level. `lua.init` maps to `lua/init.lua` and cannot collide with the stub. This is reachable
-through the `luaDir` override below, so it is not hypothetical.
-
-**Why the callback is registered first.** With no `httpCallback`, Hammerspoon does not forward the URL anywhere — it
-logs `no http callback has been set` and **drops the event**. A syntax error is worse: nothing in `init.lua` runs, so
-`hs.urlevent` is never required and the drop happens a layer earlier still, in the ObjC handler. Either way, once
-Hammerspoon is the default handler, every clicked link on the machine silently goes nowhere. It is a dead end rather
-than a loop — no spin, but no fallback to recover through either. Keeping the stub generated and `luac -p`-gated stops
-a broken file reaching the machine; keeping the hand-edited modules behind a `pcall` means a typo while iterating
-degrades to "links open in the fallback browser, console shows the error".
-
-That degradation is a **requirement on the stub, not an emergent property of the `pcall` at load time**. The load-time
-`pcall` cannot help a callback that dispatches into a module which failed to load — the error would simply be raised
-per click and the link dropped anyway. So the registered callback must itself wrap its dispatch in `pcall` and carry a
-hard-coded `hs.urlevent.openURLWithBundle` fallback that depends on nothing outside the stub.
-
-## Profile targeting
-
-Two decisions settle why this lives here rather than in a dedicated router.
-
-**Hammerspoon owns routing, the picker and the hotkeys.** It is required for the hotkeys regardless, so putting the
-router elsewhere would split one feature across two processes, two config languages and two permission surfaces, with
-the target list defined twice and free to drift.
-
-**Finicky is deferred as a unit with the rules that would justify it.** Its one irreplaceable feature is short-link
-unshortening — no Hammerspoon API returns a post-redirect URL — but that only pays off once domain rules exist to
-match against, and those rules are the client-specific part. Adopting it before then buys no routing decisions while
-adding a daemon whose broken-config behaviour is to route every link to hardcoded Safari.
-
-Four things wait for the private `kone` repo together: URL rewriting, source-application rules, unshortening, and any
-domain matching. Each needs client-identifying data that must not enter a public repo — the same reason the target
-list stores on-disk profile *directories* rather than display names.
-
-`local.browsers.targets` is the single source of truth: `{ key, label, bundle, profileDir }`, generating both the picker
-rows and the hyper hotkeys so the two cannot drift.
-
-It stores the on-disk **directory** (`Profile 1`), never the display name. Display names are read from the browser's
-`Local State` at runtime. This is what keeps a client's company name out of a public repo.
-
-Launching is `open -n -a <browser> --args --profile-directory=<dir> <url>`, via `hs.task`'s argv form so no shell
-quoting is involved. **Always pass `-n`.** `--args` maps to `NSWorkspace.OpenConfiguration.arguments`, documented as
-"only applies when a new application instance is created", and `-n` is what sets `createsNewApplicationInstance`.
-Without it LaunchServices reuses the running process, argv is fixed at exec time, and both the switches and the URL are
-dropped — nothing opens at all. It only matters when the browser is already running, which makes the failure look
-intermittent rather than absolute.
-
-### Finding an existing profile window
-
-Chromium leaves the macOS NSWindow title as the plain page title — that is what the Window menu shows — but overrides
-the **accessible** title in `BrowserView::GetAccessibleWindowTitleForChannelAndProfile`, appending the browser name and
-then the profile's display name. `hs.window` is AX-backed, so `win:title()` sees the longer form.
-
-That trailing name is `profiles::GetAvatarNameForProfile()` → `ProfileAttributesEntry::GetName()`, **not** the
-`Local State` `name` field this config reads. For a signed-in profile it is `<GAIA given name> (<Local State name>)`, so
-the title ends in `)` and a plain suffix test against the Local State name matches nothing — verified against this
-machine's live Chrome windows, where it was false for all three profiles. Match the tail against all **three** forms
-— `<name>`, `<gaia>` and `<gaia> (<name>)`, since a signed-in profile still carrying Chrome's default local name shows
-the GAIA name alone. Never a bare suffix and never an unanchored substring: `" - "` also occurs inside the page
-title, and the separator is localized (en dash in de/fr/fi, `$1 ($2)` in ru, `$1: $2` in pt-BR).
-
-**A tail miss means "not identified", and an unidentified window is not claimed — as long as the profile list could be
-read at all.** That qualifier is load-bearing. Profile names are read from `Local State`, and this config only knows
-where to find that file for Chrome, Brave, Edge and Vivaldi; for any other bundle it cannot tell one profile's windows
-from another's, so it claims all of them and says so once on the console. Two targets sharing such a bundle would fight
-over one window. Adding a browser means adding its `Local State` path in `browsers.lua`; a target that names a
-`profileDir` on a bundle missing from that table fails the build, and the assertion reads the table out of
-`browsers.lua` rather than restating it. A target with no `profileDir` is left alone — it asks for every window of its
-bundle, which is what an unreadable list gives it anyway.
-
-Where the list *is* readable, not claiming is the safe direction — claiming the wrong window would put a client's links
-in front of the wrong profile — but it is not free: a window whose tail matches nothing makes the hotkey launch a new
-one. A policy-set enterprise label (`EnterpriseCustomLabel`) replaces the local name in the title, so it is read from
-the same `info_cache` entry's `enterprise_label` and used in place of `name` when non-empty — Chrome's own
-`GetLocalProfileName` rule. The avatar button's generic "Work"/"School" badge is not stored there and never reaches the
-title, so it needs nothing. No profile on this machine carries a label, so this rests on Chromium source rather than a
-live window.
-
-Two conditions gate the profile name appearing at all: the profile manager must know more than one profile
-(`GetNumberOfProfiles() > 1` — Brave has one today, so its windows carry none) and the profile must not be
-off-the-record, since Incognito and Guest take earlier branches appending `(Incognito)`/`(Guest)`.
-
-**"No profile name" therefore cannot simply mean "the default profile".** An automation copy of Chrome — the
-`chrome-devtools-mcp` one that runs on this machine — reports the same bundle id from the same bundle path, but runs
-under its own `--user-data-dir`, so its windows carry no profile suffix either. Three such Chrome processes were
-running when this was measured. The rule that works is to read the *configured* browser's `Local State`: a browser
-that knows more than one profile appends a name to every eligible window, so a bare title there is **unknown**, while
-a browser that knows only one appends nothing and every window is its. That is also why window lookup iterates
-`hs.application.applicationsForBundleID` rather than `hs.application.get`, which returns only one of the processes.
-
-## The picker
-
-`hs.hotkey.modal`, not `hs.chooser`, for two independent reasons. A chooser cannot commit on a single keypress — it is
-a query field, so a choice costs typing plus Return. And it **takes** focus: `chooser.lua` installs a default global
-callback that stores `window.frontmostWindow()` on `willOpen` and calls `:focus()` on it again at `didClose`, which is
-machinery that only exists because opening one steals focus in the first place.
-
-Taking focus is the disqualifying half. A link is clicked from inside some other application, and pulling focus out of
-it to ask a question is exactly what this is meant to avoid. A modal binds real hotkeys instead, so the choice is made
-while the clicking application still holds focus.
-
-The danger is the mirror of the usefulness. While the modal is entered it swallows its keys from every application, so
-a modal left entered would make those letters untypeable machine-wide. Every path out of `picker.lua` exits it, and a
-timer guarantees an exit even if none of them run — the timer is armed *before* the modal is entered, so it cannot
-outlive it.
-
-Two behaviours are choices rather than consequences, and either could reasonably be the other:
-
-- **A second link while the picker is up joins a queue**, and one choice then opens all of them. Clicking several
-  links in a burst is what this serves. The alternative silently drops every link but one.
-- **Each queued link restarts the countdown**, so the newest link gets a full `picker.timeout` to be answered rather
-  than the remainder of the first one's. That has no fixed point on its own — links arriving faster than the countdown
-  would hold the keyboard for as long as they kept coming — so a second timer, `picker.maxHold`, is armed once per
-  picker and never restarted. Whichever runs out first ends it.
-- **Running out of time routes to the first target rather than dropping the link**, and both timers do the same thing.
-  A dropped link is invisible and leaves the user with nothing; reorder `local.browsers.targets` to change which
-  target that is.
-
-**Shift with a target's key opens the links in a private window of that profile** — `--incognito` beside
-`--profile-directory`, which a running Chromium honours because its process singleton forwards the whole argv. It is
-bound only for the Chromium family (the bundles `M.localState` lists); elsewhere shift is unbound rather than opening
-an ordinary window that looks like a private one. A policy that disables Incognito for a managed profile makes
-Chromium open an ordinary window, and that is the browser's call. A private window's title ends `(Incognito)` or
-`(Private)` rather than a profile name, so the profile's hotkey does not count it as the profile's: with only a
-private window open, the hotkey opens an ordinary one.
-
-### Two limits worth knowing before debugging one of them
-
-**Window lookup only sees the current Mission Control Space.** `app:allWindows()` is documented as returning only
-windows in the current Space, and this config does not use `hs.window.filter`, which is the documented way around it.
-So a browser window that is fullscreen or on another Space is invisible to the hotkey: it finds nothing, launches, and
-you get a duplicate window on the current Space. It is self-correcting — the next press finds that new window — and it
-does not affect link routing, which always goes through `open`.
-
-**The stub's crash fallback is hard-coded Safari, and cannot carry a profile.** Not because it could not name a
-configured target — the previous value was the first target's bundle, interpolated at eval time and just as independent
-of anything loaded at runtime. It is hard-coded because Safari is the one bundle guaranteed to be present on any Mac,
-so the fallback holds even on a machine whose configured browsers are not installed. The cost is real and accepted: a
-router failure puts the link in Safari rather than your primary browser, and `openURLWithBundle` takes a bundle id and
-nothing else, so it lands in whichever Safari profile was last used. A link in the wrong browser is recoverable; a link
-that goes nowhere is not.
-
-## Testing
-
-`nix flake check` is the whole verification surface for the Lua, because the hand-written config is symlinked out of
-the store and no build ever loads it. The check parses every Lua file with the same Lua 5.4 the app embeds, holds it to
-`stylua.toml`, and then *runs* it against a stub `hs` that records what the modules did.
-
-Two things about that are easy to break and are recorded nowhere else:
-
-- **The generated `init.lua` is executed too, not just parsed.** It lives in `stub.nix` precisely so the check can
-  build it with test values and `dofile` it — it is the one file whose failure loses every clicked link on the machine.
-  `tests/fixtures/hs/` resolves the `require("hs.ipc")` it performs for its side effect.
-- **Its `cfgDir` must resolve inside the build directory.** The stub prepends `<cfgDir>/lua` to `package.path` ahead of
-  everything else, and this flake builds unsandboxed, so a fixed `/tmp` name would let any local process shadow the
-  modules under test. The check substitutes a placeholder with `$PWD/cfg` for that reason.
-
-Anything involving real key capture, a real window server or real LaunchServices has to be tested on the machine.
+Hammerspoon's `package.path` template `configdir/?.lua` already resolves `require("lua.router")`. The stub also
+prepends `configdir/lua/?.lua` and `configdir/lua/?/init.lua` so modules require each other by bare name.
 
 ## `~/.hammerspoon` must stay gone
 
-`MJConfigFile` is an undocumented `NSUserDefaults` key. Holding Cmd+Opt at launch removes every key in the domain, and a
-prefs reset does the same. When it is missing Hammerspoon silently falls back to the compiled-in
-`~/.hammerspoon/init.lua` — with no error.
+Holding Cmd+Opt at launch, or any prefs reset, removes `MJConfigFile`, and Hammerspoon then silently loads
+`~/.hammerspoon/init.lua`. That directory and its `dotfiles` source are both gone, so the fallback fails visibly.
+Recreating either — including through a `setup.sh` run — restores the silent failure.
 
-That directory and its source in `dotfiles` are both removed, so the fallback now fails visibly instead of loading a
-stale config. Recreating either would restore the failure mode rather than a safety net: a `setup.sh` run rsyncs
-`dotfiles/home/` into `~`, so a file there lands on the exact path a lost `MJConfigFile` silently reaches for.
+## The init.lua stub
+
+Generated, checked with `pkgs.lua5_4`'s `luac -p` (`pkgs.lua` is 5.2; Hammerspoon embeds 5.4.7), and executed by the
+test suite. Before loading anything that can fail it:
+
+1. registers `hs.urlevent.httpCallback`;
+2. `require("hs.ipc")`, so `hs -c` can reach the instance — activation calls the package's `hs` by store path;
+3. notifies loudly if `hs.configdir` differs from what nix configured;
+4. prepends `lua/` to `package.path`;
+5. starts the reload watcher, held in a global, since `hs.pathwatcher` keeps no registry.
+
+Only then is the hand-written config loaded, inside a `pcall`.
+
+**The callback comes first because a missing one drops links.** With no `httpCallback`, Hammerspoon logs and discards
+the event; once it is the default handler every clicked link goes nowhere, with no loop and no fallback. The callback
+itself wraps dispatch in `pcall` and falls back to `hs.urlevent.openURLWithBundle` with **Safari hard-coded** — the one
+bundle every Mac has. A router failure therefore lands a link in Safari's last-used profile: recoverable, where a
+dropped link is not.
+
+**The final `require` must be the dotted `lua.init`.** A bare `require("init")` resolves through `<configdir>/?.lua`
+back to the stub itself, and because Hammerspoon loads `init.lua` with `loadfile`, Lua's loop guard never arms: it
+recurses until the C stack overflows, and the `pcall` reports success — no hotkeys, no error.
+
+## Hotkeys
+
+Every hyper hotkey — the apps in `lua/init.lua` and one per browser target — goes through `whu.toggle`. What differs is
+passed in: which windows the hotkey owns and how it opens one. A press:
+
+- **puts away** a focused window that is the hotkey's own: hides the app, or minimizes just that window when another of
+  the app's standard windows is showing (another browser profile's). A full-screen window always hides;
+- **raises** otherwise: unhides, unminimizes, applies the layout, focuses;
+- **goes to a full-screen window's Space** when the hotkey has no window on this one (see below);
+- **launches** when there is nothing, and positions the new window after 1.5s with a held timer that the next press
+  cancels. `watchCreate` hotkeys (Ghostty) position every new window through a filter matched by bundle id —
+  `nameForBundleID` is not `app:name()` for Chrome or Brave.
+
+**A hotkey never switches the keyboard layout at press time.** It records the layout it wants, and the `windowFocused`
+handler applies it when that app's window takes focus. Set at press, the layout changed under the app still being typed
+in and landed before the handler, which then recorded the forced layout as the one to return to. The filter drops
+events for windows it does not yet consider visible, so a held check one second later applies a request still pending
+once its app has focus; the policy is safe to run twice for one focus. The request expires after 10s. Apps in `forceUSApps` get US and the previous layout is restored on leaving them; the retry that works around
+macOS dropping the first switch is held and replaced, never left armed.
+
+**The focus filter is `hs.window.filter.new(nil)`**, a copy of the default: `visible = true` plus 30 named rejects,
+including Spotlight and Notification Center, which is what keeps them from restoring the layout mid-session. None of
+the hotkey apps is on that list. `new(true)` would have no rules at all.
+
+**Full-screen windows are invisible from every other Space.** `app:allWindows()` omits them and `hs.window.get(id)`
+returns nil, while `hs.spaces.windowsForSpace` still lists the id (measured). Two consequences are handled:
+
+- pressed from inside a full-screen app, `focusedWindow()` still sees the window, so it counts as the hotkey's own;
+- pressed from elsewhere, when a `fullscreen` Space exists, the window server's full list (read through JXA, ~70ms)
+  gives each window's owner pid, and a Space holding one of the app's windows is gone to with `hs.spaces.gotoSpace` —
+  Mission Control, briefly. A browser profile sharing its process with another profile never does this, because the
+  pid cannot say which profile the window is; it launches instead.
+
+Ordinary Spaces are not a problem: `allWindows()` returns windows on an unfocused Space on this macOS (measured).
+
+## Browser profiles
+
+**Hammerspoon owns routing, the picker and the hotkeys** — it is needed for the hotkeys anyway, and a separate router
+would split one target list across two processes. **Finicky is deferred**, together with URL rewriting, source-app rules,
+unshortening and domain matching: all need client-identifying data that belongs in the private `kone` repo, not here.
+
+`local.browsers.targets` — `{ key, label, bundle, profileDir }` — generates both the picker rows and the hotkeys. It
+stores the on-disk profile **directory**; display names are read from the browser's `Local State` at runtime, which is
+what keeps client names out of this public repo.
+
+**Launching is `open -n -a <browser> --args --profile-directory=<dir> <url>`**, argv via `hs.task`. `-n` is mandatory:
+`--args` only applies to a new instance, and without it a running browser receives neither the profile nor the URL.
+Chromium's process singleton forwards the whole argv to the running instance, which is what makes this work. A target
+with no `profileDir` gets no `-n` and no `--args`: `open` would hand the URL over as argv, which only Chromium reads.
+
+### Finding a profile's windows
+
+`hs.window` reads the **accessible** title, which Chromium ends with `GetAvatarNameForProfile()` — for a signed-in
+profile `<GAIA given name> (<local name>)`. The local name is `info_cache`'s `enterprise_label` when a policy set one,
+otherwise `name`. A window is matched on its tail against `<gaia> (<local>)`, `<gaia>` and `<local>`, longest match
+across all profiles, with a non-alphanumeric boundary — never a substring, since `" - "` occurs in page titles and the
+separator is localized.
+
+**A miss means "not identified", and an unidentified window is not claimed** — provided the profile list was readable:
+
+- `Local State` paths are known for Chrome, Brave, Edge and Vivaldi. For any other bundle every window is claimed, and a
+  `profileDir` on such a bundle fails the build; the assertion reads the list out of `browsers.lua`.
+- A browser that knows **one** profile appends no name at all, so all its windows are that profile's.
+- A browser that knows several names every window, so a bare title is **unknown**. That covers automation copies of
+  Chrome (`chrome-devtools-mcp`, own `--user-data-dir`, same bundle id) — which is also why lookup iterates
+  `applicationsForBundleID` rather than `application.get`.
+- Private and Guest windows end `(Incognito)`, `(Private)` or `(Guest)` instead, so they belong to no profile: with only
+  a private window open, the profile's hotkey opens an ordinary one.
+
+Only `isStandard()` windows count: Chromium's companion status-bar windows have no id and never minimize.
+
+## The picker
+
+**`hs.hotkey.modal`, not `hs.chooser`.** A chooser is a query field, so it cannot commit on one keypress, and it takes
+focus away from the application the link was clicked in. A modal binds real hotkeys while that app keeps focus.
+
+The cost is that an entered modal swallows its keys machine-wide, so every path out exits it, a countdown guarantees an
+exit, and the alert always outlives the countdown so the keyboard is never held with nothing on screen.
+
+- **Links clicked while it is up join a queue**; one choice opens them all.
+- **Each link restarts the 15s countdown**, and a 60s ceiling armed once per picker bounds how long a stream of links
+  can hold the keyboard.
+- **Running out of time routes to the first target** rather than dropping the links.
+- **Shift with a key opens them in a private window** of that profile (`--incognito`), bound only for the Chromium
+  family. A policy that disables Incognito makes Chromium open an ordinary window.
+
+A modal does capture plain letters while another app is frontmost — measured by posting at `kCGHIDEventTap`.
+`hs.eventtap.keyStroke` bypasses Carbon hotkey dispatch, so a test built on it proves nothing.
+
+## Testing
+
+`nix flake check` is the only thing that runs this Lua: it is symlinked out of the store, so no build loads it. The
+check parses every file with Lua 5.4, holds it to `stylua.toml`, and runs it against a recording stub `hs`.
+
+- **The generated stub is executed, not just parsed.** It lives in `stub.nix` so the check can build it with test
+  values; `tests/fixtures/hs/` supplies the `hs.ipc` it requires.
+- **Its `cfgDir` is substituted with a path inside the build directory.** The flake builds unsandboxed, and the stub
+  prepends `<cfgDir>/lua` ahead of everything, so a fixed `/tmp` path would let any local process shadow the modules.
+
+Real key capture, the window server, Spaces and LaunchServices can only be exercised on the machine. Probe the live
+instance **serially** — `hs -a -t <s> -c …`, stdin from `/dev/null`, never `-C` — since concurrent probes have crashed
+it.
 
 ## `hs.ipc` is a privilege surface
 
-The stub calls `require("hs.ipc")` so activation can reload the config with `hs -c`. That opens a name-based Mach port
-with no authentication beyond the user session, and it was **not open before this module existed** — before it, the
-CLI had never worked on this Mac.
+`require("hs.ipc")` opens an unauthenticated Mach port, so any process running as this user — coding agents included —
+can run Lua inside Hammerspoon with its Accessibility grant. Accepted: activation needs it to reload the config, and
+anything running as this user can drive the GUI by other means.
 
-The consequence is worth stating plainly: any process running as this user can then execute arbitrary Lua inside
-Hammerspoon and inherit its Accessibility grant — synthesising keystrokes into any application, reading window
-contents, running shell commands. This workspace runs coding agents as that same user. The TCC and code-signing
-argument above is about what may *install* Hammerspoon; this is about what may *drive* it, and they are unrelated.
+## Reloading and `luaDir`
 
-It is accepted because the alternative — activation that cannot reload the config it just replaced — is worse, and
-because anything already running as this user can drive the GUI by other means. It is documented because it is a real
-capability change the packaging discussion would otherwise hide.
+The watcher points at `<cfgdir>/lua`, never `<cfgdir>`: `hs.pathwatcher` resolves symlinks first, so only the former
+follows into the repo.
 
-## Reloading
+Activation does nothing under `--dry-run`, read from the parent's argv. `darwin-rebuild` still runs the activation
+script for a dry run, and `DRY_RUN` cannot be set because `activate` runs under `env -i`.
 
-The reload watcher must point at `<cfgdir>/lua`, never at `<cfgdir>`. `hs.pathwatcher` resolves symlinks before
-creating the FSEvents stream, so watching `lua/` follows into the repo and fires on edits there; watching the parent
-sees only a symlink entry and never fires.
+Otherwise it restarts when `hs.configdir` does not match the configured path and reloads when it does. **A failed probe
+counts as a mismatch**: on the first switch the running instance never loaded `hs.ipc`, so the probe cannot answer on
+exactly the run that must restart. That one verdict gates the reload and the handler claim. The restart re-asserts
+`MJConfigFile` after the kill, since a terminating app can flush a stale cached value back.
 
-Activation does nothing at all under a dry run, and the intent has to be recovered from the parent's argv.
-`darwin-rebuild` routes `--dry-run` into build flags only and runs the activation script regardless, so without an
-explicit check a documented preview command would really restart Hammerspoon and raise the handler dialog.
-
-home-manager's own guard also tests `$DRY_RUN`, and copying that half here would be cargo: nix-darwin's `activate`
-begins `#!/usr/bin/env -i …/bash`, so no environment is inherited and the variable can never be set. home-manager
-tests it because its *user* script is invoked as `env DRY_RUN=1 <script>`, which is a different process.
-
-Otherwise it restarts when `hs.configdir` does not yet match the configured path, and only reloads when it does. The
-restart branch is what makes the first switch work, since the preference is read once at launch.
-
-**A failed probe must count as a mismatch.** The comparison runs `hs -c`, which needs `hs.ipc` loaded in the *running*
-instance — and on the first activation that instance is still the old config, which never loaded it. So the probe
-cannot answer on precisely the run that must restart. Treat any failure, empty output or non-zero exit as "does not
-match" and restart; reading it as an error, or as a match, leaves the Mac running the stale config while activation
-reports success.
-
-That same comparison is the one verdict everything downstream is gated on — whether to reload, and whether to claim the
-handler. The restart also re-asserts `MJConfigFile` between the kill and the relaunch: it is written in the
-`userDefaults` phase into the prefs of an app that is still running, and a termination flush can put the cached value
-back.
-
-Edits made inside an agent worktree do not hot-reload — `local.hammerspoon.luaDir` defaults to the main checkout, and
-that is correct: the running config should follow the reviewed tree, not a branch.
-
-**Ordinary git operations in the watched tree are deploys.** The watcher fires on any `*.lua` write under `luaDir`, so
-a `git checkout`, `git stash` or rebase in the main checkout moves the running config to whatever that branch holds,
-half a second later. Checking out anything older than the module leaves the symlink dangling and the hotkeys gone,
-announced only by a notification — and recovery is not automatic, because the bare `lua` path has no `.lua` suffix and
-so does not pass the watcher's own filter. This is the cost of live editing from a real checkout, and the main argument
-for pointing `luaDir` at something that is not a branch-switching tree.
-
-The other consequence is that **activating an unmerged branch needs that option overridden**, because the symlink would
-otherwise point at a directory that only exists on the branch. Nix cannot catch this: the path is a plain string with
-no store context, so a missing target builds cleanly and fails only at runtime. Activation therefore checks the
-directory itself and, when it is absent, says so and leaves the running Hammerspoon alone — restarting into a config
-with no `lua/` would trade a working instance for one with no hotkeys.
+**`luaDir` defaults to the main checkout, so git operations there are deploys.** Any `*.lua` write reloads the running
+config — a `checkout`, `stash` or rebase included — and checking out a tree without the module leaves the hotkeys gone
+until a manual reload. Worktree edits do not reload. Activating an unmerged branch needs `local.hammerspoon.luaDir`
+overridden; activation checks the directory exists and otherwise leaves the running instance alone, since nix cannot
+see a missing out-of-store target.
