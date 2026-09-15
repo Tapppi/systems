@@ -32,14 +32,17 @@ function _G.mkwin(id, title, opts)
   local owner = opts.app
   local win
   win = {
+    -- Hammerspoon 1.1.1 returns 0, never nil, for an id it cannot read, so a
+    -- fixture built without one behaves the same.
     id = function()
-      return id
+      return id or 0
     end,
     title = function()
       return title
     end,
+    -- A hidden app's windows are not visible either.
     isVisible = function()
-      return opts.visible ~= false and not minimized
+      return opts.visible ~= false and not minimized and not (owner and owner._hidden)
     end,
     isMinimized = function()
       return minimized
@@ -93,6 +96,10 @@ function _G.mkapp(windows, opts)
     mainWindow = function()
       return opts.main
     end,
+    isFrontmost = function()
+      return _G.FRONTMOST == app
+    end,
+    _hidden = false,
     allWindows = function()
       return windows
     end,
@@ -106,9 +113,11 @@ function _G.mkapp(windows, opts)
       return out
     end,
     hide = function()
+      app._hidden = true
       recorded.hidden = (recorded.hidden or 0) + 1
     end,
     unhide = function()
+      app._hidden = false
       recorded.unhidden = (recorded.unhidden or 0) + 1
     end,
     pid = function()
@@ -138,6 +147,7 @@ _G.STAT = {}
 _G.JSON = {}
 _G.PATHS = {}
 _G.FOCUSED = nil
+_G.FRONTMOST = nil
 _G.NOW = 1000
 _G.SOURCE = "com.apple.keylayout.US"
 
@@ -256,11 +266,19 @@ _G.hs = {
   -- The full-screen fallback reads Spaces and the window server's owner list.
   -- Default: one ordinary Space, so nothing is full-screen and nothing is read.
   spaces = {
+    -- The real one returns nil and a message on failure; SPACES_RAISE covers a
+    -- private API that throws instead.
     allSpaces = function()
       if _G.SPACES_RAISE then
         error("spaces unavailable")
       end
+      if _G.SPACES_FAIL then
+        return nil, "spaces unavailable"
+      end
       return _G.SPACES or { ["screen-1"] = { 1 } }
+    end,
+    activeSpaces = function()
+      return _G.ACTIVE_SPACES or { ["screen-1"] = 1 }
     end,
     spaceType = function(id)
       return (_G.SPACE_TYPES or {})[id] or "user"
@@ -270,6 +288,9 @@ _G.hs = {
     end,
     gotoSpace = function(id)
       recorded.wentToSpace = id
+      if _G.GOTO_FAILS then
+        return nil, "child is nil"
+      end
       return true
     end,
   },
