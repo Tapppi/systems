@@ -171,6 +171,39 @@ check(
   end)()
 )
 
+check(
+  "an enterprise label stands in for the profile name",
+  (function()
+    STAT[chrome] = { mode = "file", modification = 20, size = 200 }
+    JSON[chrome] = {
+      profile = {
+        info_cache = {
+          ["Profile 1"] = { name = "acme.example", gaia_given_name = "Tapani", enterprise_label = "Acme Corp" },
+          ["Profile 2"] = { name = "Client Co", gaia_given_name = "Tapani", enterprise_label = "" },
+        },
+      },
+    }
+    local labelled = mkwin(61, "page - Google Chrome - Tapani (Acme Corp)")
+    local unlabelled = mkwin(62, "page - Google Chrome - Tapani (Client Co)")
+    APPS["com.google.Chrome"] = { mkapp({ labelled, unlabelled }) }
+    local found = browsers.windowsFor(company)
+    local other = browsers.windowsFor(client)
+    STAT[chrome] = { mode = "file", modification = 21, size = 201 }
+    JSON[chrome] = {
+      profile = {
+        info_cache = {
+          ["Default"] = { name = "Your Chrome" },
+          ["Profile 1"] = { name = "acme.example", gaia_given_name = "Tapani" },
+          ["Profile 2"] = { name = "Client Co", gaia_given_name = "Tapani" },
+        },
+      },
+    }
+    APPS["com.google.Chrome"] = { mkapp(chromeWins), mkapp(automationWins) }
+    -- An empty label is Chrome's "none", not a name.
+    return #found == 1 and found[1]:id() == 61 and #other == 1 and other[1]:id() == 62
+  end)()
+)
+
 local companyWins = browsers.windowsFor(company)
 local clientWins = browsers.windowsFor(client)
 check("company matches only its own window", #companyWins == 1 and companyWins[1]:id() == 1, "#=" .. #companyWins)

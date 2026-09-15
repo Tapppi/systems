@@ -57,8 +57,18 @@ local function readProfiles(path)
 
   local profiles = {}
   for dir, entry in pairs(info) do
-    if type(entry) == "table" and type(entry.name) == "string" and entry.name ~= "" then
-      profiles[dir] = { name = entry.name, gaia = entry.gaia_given_name }
+    if type(entry) == "table" then
+      -- A policy-set enterprise label replaces the local name everywhere Chrome
+      -- shows one, the window title included (ProfileAttributesEntry::
+      -- GetLocalProfileName). Matching the name alone finds none of that
+      -- profile's windows, and every press opens another.
+      local name = entry.enterprise_label
+      if type(name) ~= "string" or name == "" then
+        name = entry.name
+      end
+      if type(name) == "string" and name ~= "" then
+        profiles[dir] = { name = name, gaia = entry.gaia_given_name }
+      end
     end
   end
 

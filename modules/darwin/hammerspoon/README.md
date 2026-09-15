@@ -270,11 +270,12 @@ over one window. Adding a browser means adding its `Local State` path in `browse
 bundle, which is what an unreadable list gives it anyway.
 
 Where the list *is* readable, not claiming is the safe direction — claiming the wrong window would put a client's links
-in front of the wrong profile — but it is not free.
-An enterprise-managed profile substitutes its enterprise label for the `Local State` name, so its windows match no tail
-at all; the hotkey then finds nothing to focus and launches, which opens a *new* window rather than raising the
-existing one. Repeated presses repeat that. If a profile ever behaves that way, its label is the thing to check
-first. Tracked in SYSMI-63 rather than guessed at here, since no profile on this machine currently does it.
+in front of the wrong profile — but it is not free: a window whose tail matches nothing makes the hotkey launch a new
+one. A policy-set enterprise label (`EnterpriseCustomLabel`) replaces the local name in the title, so it is read from
+the same `info_cache` entry's `enterprise_label` and used in place of `name` when non-empty — Chrome's own
+`GetLocalProfileName` rule. The avatar button's generic "Work"/"School" badge is not stored there and never reaches the
+title, so it needs nothing. No profile on this machine carries a label, so this rests on Chromium source rather than a
+live window.
 
 Two conditions gate the profile name appearing at all: the profile manager must know more than one profile
 (`GetNumberOfProfiles() > 1` — Brave has one today, so its windows carry none) and the profile must not be
