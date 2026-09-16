@@ -31,8 +31,9 @@ The repository structure is based on [dustinlyons/nixos-config](https://github.c
     `hosts/darwin-minimal/`. It is deliberately narrow while the migration
     proceeds: the nix-rosetta-builder Linux builder, neovim (built from
     `flakes/nvim`), neovide wrapped to launch that exact neovim, `herdr` and
-    its config, the `session-sync` launchd agent, Hammerspoon (application,
-    configuration, link routing and hotkeys, see
+    its config, `codex` and its system defaults, `opencode`, `pi-coding-agent`,
+    the `session-sync` launchd agent, Hammerspoon (application, configuration,
+    link routing and hotkeys, see
     `modules/darwin/hammerspoon/README.md`), and the Determinate Nix
     accommodations. Everything else on that machine is owned by `macos-setup` —
     check there before assuming something is managed here.
@@ -260,6 +261,9 @@ Active on `asterix` — these are imported by `hosts/darwin-minimal/`:
 
 - **session-sync.nix**: launchd agent mirroring `~/.claude/` to the homelab archive
 - **herdr.nix**: the agent multiplexer, plus its generated config
+- **codex.nix**: Codex from nixpkgs-fresh, plus system defaults in `/etc/codex/config.toml`
+- **opencode.nix**: OpenCode from nixpkgs-fresh; config stays with the dotfiles repo
+- **pi-coding-agent.nix**: pi from nixpkgs-fresh
 - **hammerspoon/**: the Hammerspoon application, its configuration, link routing and hotkeys. Read its
   `README.md` before touching it — the config path, the module name the stub
   requires and the restart-vs-reload branch each prevent a specific failure

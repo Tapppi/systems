@@ -8,9 +8,12 @@ Imported by `hosts/darwin-minimal/`. Changing these changes a real machine.
 
 ```text
 .
-├── session-sync.nix   # launchd agent mirroring ~/.claude/ to the homelab archive
-├── herdr.nix          # the agent multiplexer, and its generated config
-└── hammerspoon/       # the Hammerspoon app and its config — read its README first
+├── session-sync.nix      # launchd agent mirroring ~/.claude/ to the homelab archive
+├── herdr.nix             # the agent multiplexer, and its generated config
+├── codex.nix             # Codex from nixpkgs-fresh, plus its system defaults in /etc/codex/config.toml
+├── opencode.nix          # OpenCode from nixpkgs-fresh; its config stays with the dotfiles repo
+├── pi-coding-agent.nix   # pi from nixpkgs-fresh
+└── hammerspoon/          # the Hammerspoon app and its config — read its README first
 ```
 
 They contribute host-level configuration — `environment.systemPackages`, activation scripts, launchd agents — and, in
