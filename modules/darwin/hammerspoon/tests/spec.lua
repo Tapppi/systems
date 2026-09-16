@@ -373,10 +373,11 @@ check(
 )
 
 check(
-  "a request the focus filter missed is applied once its app has focus, and only then",
+  "an app that already has focus gets its layout at once, and no other app does",
   (function()
-    -- windowFocused drops events for windows it does not yet consider visible,
-    -- which a just-unhidden window may not be.
+    -- Measured: every raise out of another app emits windowFocused, and the one
+    -- case that emits nothing is the app that already holds focus — where there
+    -- is no other app for an immediate switch to disturb.
     local calls = {}
     local savedOnFocus = whu.onFocus
     whu.onFocus = function(win)
@@ -385,47 +386,40 @@ check(
     end
     NOW = 6000
 
-    local other = mkwin(320, "elsewhere")
-    mkapp({ other }, { bundle = "com.example.StillTyping" })
-    whu.requestInputSource("com.example.Checked", whu.us)
-    local first = whu._intentCheck
-    FOCUSED = other
-    first.fn()
-    -- Still typing elsewhere: nothing applied, and it looks again rather than
-    -- giving up on a slow unhide.
-    local notYet = #calls == 0
-    local rearmed = whu._intentCheck ~= nil and whu._intentCheck ~= first
+    local mine = mkwin(320, "Page - Google Chrome - Tapani (acme.example)")
+    local theirs = mkwin(321, "Other - Google Chrome - Tapani (Client Co)")
+    local chromeApp = mkapp({ mine, theirs }, { bundle = "com.google.Chrome" })
+    APPS["com.google.Chrome"] = { chromeApp }
 
-    NOW = 6000 + whu.intentTTL + 1
-    whu._intentCheck.fn()
-    local gaveUp = #calls == 0 and whu._intentCheck == nil
+    -- Chrome frontmost with the client profile focused, pressing for company.
+    FRONTMOST = chromeApp
+    FOCUSED = theirs
+    browsers.toggle(company, nil)
+    local immediate = #calls == 1 and calls[1] == 320 and whu.claimInputSource(chromeApp) == nil
 
-    NOW = 7000
-    local arrived = mkwin(321, "arrived")
-    mkapp({ arrived }, { bundle = "com.example.Checked" })
-    whu.requestInputSource("com.example.Checked", whu.us)
-    FOCUSED = arrived
-    whu._intentCheck.fn()
-    local applied = #calls == 1 and calls[1] == 321 and whu._intentCheck == nil
+    -- Nothing else does: from another app the request waits for the focus event,
+    -- which would otherwise switch the layout under the app being typed in.
+    FRONTMOST = mkapp({}, { bundle = "com.example.StillTyping" })
+    FOCUSED = nil
+    browsers.toggle(client, nil)
+    local deferred = #calls == 1 and whu.claimInputSource(chromeApp) == whu.fiProg
 
-    -- Already consumed by the filter: the check must not run the policy again.
-    whu.requestInputSource("com.example.Checked", whu.us)
-    local third = whu._intentCheck
-    whu.claimInputSource(arrived:application())
-    third.fn()
-    local notTwice = #calls == 1 and whu._intentCheck == nil
-
-    -- Held and replaced: a later press supersedes the earlier check.
-    whu.requestInputSource("com.example.Checked", whu.us)
-    local superseded = whu._intentCheck
-    whu.requestInputSource("com.example.Checked", whu.us)
-    local replaced = superseded ~= nil and superseded.stopped == true and whu._intentCheck ~= superseded
-    whu.claimInputSource(arrived:application())
-
+    FRONTMOST = nil
     whu.onFocus = savedOnFocus
-    return notYet and rearmed and gaveUp and applied and notTwice and replaced
+    return immediate and deferred
   end)(),
-  "a check that fires early switches the layout under the app still being typed in"
+  "an immediate switch out of another app is the defect the request exists to avoid"
+)
+
+check(
+  "a request that no focus ever consumed expires",
+  (function()
+    NOW = 6500
+    whu.requestInputSource("com.example.NeverFocused", whu.us)
+    NOW = 6500 + whu.intentTTL + 1
+    return whu.claimInputSource(mkapp({}, { bundle = "com.example.NeverFocused" })) == nil
+  end)(),
+  "otherwise a window that never arrived sets the layout on some later click"
 )
 
 check(
@@ -789,6 +783,7 @@ check(
     local spec, app = appHotkey("t20", "com.example.Desktop", { win }, { main = win })
     FRONTMOST = app
     FOCUSED = mkwin(0, "desktop", { standard = false, app = app })
+    -- Hidden by the app that holds focus, whichever window that is.
     local focusedBefore = #RECORDED.focused
     whu.toggle(spec)
     FRONTMOST = nil
