@@ -119,7 +119,8 @@ passed in: which windows the hotkey owns and how it opens one. A press:
 
 - **puts away** a focused window that is the hotkey's own: hides the app, or minimizes just that window when another of
   the app's standard windows is showing (another browser profile's). A full-screen window always hides. An app hotkey
-  also hides its app when the app is frontmost with a dialog, panel or Finder's desktop focused;
+  also hides its app whenever the app holds focus, with a dialog, a panel or Finder's desktop focused; a browser
+  profile never does, or one profile would put another away;
 - **raises** otherwise: unhides, unminimizes, applies the layout, focuses;
 - **goes to a full-screen window's Space** when the hotkey has no window on this one (see below);
 - **launches** when there is nothing, and positions the new window after 1.5s with a held timer that the next press
@@ -130,10 +131,18 @@ passed in: which windows the hotkey owns and how it opens one. A press:
 handler applies it when that app's window takes focus. Set at press, the layout changed under the app still being typed
 in and landed before the handler, which then recorded the forced layout as the one to return to.
 
-The filter drops events for windows it does not yet consider visible, so a held check looks every second for a request
-still pending once its app has focus, until the request expires after 10s; the policy is safe to run twice for one
-focus. Apps in `forceUSApps` get US and the previous layout is restored on leaving them. The retry that works around
-macOS dropping the first switch is held and replaced, never left armed.
+Measured against a `windowFocused` subscriber (2026-09-16): the event fires for a scripted `win:focus()` into another
+app, for unhide-then-focus (the window reads visible immediately, so the default filter's `visible` rule does not drop
+it), for unminimize-then-focus from another app, for a launch, for reopening an app with no windows, for focusing
+another window of the frontmost app, and on arriving at a Space through `gotoSpace`. **One case emits nothing: the app
+is already frontmost and the window raised is already its focused window.** So a press into an app that already holds
+focus switches the layout at once — there is no other app to disturb — and every other press waits for the event. A
+request nothing consumes expires after 10s.
+
+An activation event carries whatever the app's focused window was at the time, which after an unminimize is not yet the
+window just raised, so the policy matches on the app rather than the window. Apps in `forceUSApps` get US and the
+previous layout is restored on leaving them. The retry that works around macOS dropping the first switch is held and
+replaced, never left armed.
 
 **The focus filter is `hs.window.filter.new(nil)`**, a copy of the default: `visible = true` plus 30 named rejects,
 including Spotlight and Notification Center, which is what keeps them from restoring the layout mid-session. None of

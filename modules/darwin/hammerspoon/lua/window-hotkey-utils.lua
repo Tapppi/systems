@@ -46,48 +46,27 @@ local intent = nil
 -- it, and so does the check below; it must be safe to run twice for one focus.
 M.onFocus = nil
 
--- A second path to the focus policy, held and replaced like the retry. The
--- windowFocused filter is the first, but it drops events for windows it does not
--- consider visible, and a window just unhidden may not be yet. A request still
--- pending once its app has focus is applied from here instead, checked every
--- second until the request expires.
-M.intentCheckDelay = 1
-M._intentCheck = nil
-
-local function armIntentCheck(bundleID)
-  if M._intentCheck then
-    M._intentCheck:stop()
-  end
-  local timer
-  timer = hs.timer.doAfter(M.intentCheckDelay, function()
-    if M._intentCheck == timer then
-      M._intentCheck = nil
-    end
-    local pending = intent
-    if not M.onFocus or pending == nil or pending.bundle ~= bundleID then
-      return
-    end
-    local focused = hs.window.focusedWindow()
-    local app = focused and focused:application()
-    -- Only once the app has focus: applied earlier it would land under whatever
-    -- is still being typed in, which is the defect the request exists to avoid.
-    if app and app:bundleID() == bundleID then
-      M.onFocus(focused)
-    elseif hs.timer.secondsSinceEpoch() - pending.at < M.intentTTL then
-      -- A slow unhide or launch can take longer than one check.
-      armIntentCheck(bundleID)
-    end
-  end)
-  M._intentCheck = timer
-end
-
+-- Measured on this machine, 2026-09-16, against a windowFocused subscriber:
+-- the event fires for a scripted win:focus() on another app, for unhide+focus
+-- (the window reads visible immediately, so the default filter's visible rule
+-- does not drop it), for unminimize+focus from another app, for a launch, for
+-- reopening an app with no windows (frontmost or not), for focusing another
+-- window of the frontmost app, and on arriving at a Space through gotoSpace.
+--
+-- One case emits nothing: the app is already frontmost and the window raised is
+-- already its focused window, so nothing changes. The toggle answers that with
+-- the branch below rather than a timer, since an app that already has focus is
+-- the app being typed in — there is nothing for an immediate switch to disturb.
 function M.requestInputSource(bundleID, sourceID)
   intent = { bundle = bundleID, source = sourceID, at = hs.timer.secondsSinceEpoch() }
-  armIntentCheck(bundleID)
 end
 
 --- The layout a hotkey asked for, if this focus is the one it was waiting for.
 --- Consumed either way once the app matches.
+---
+--- Matched on the app, not the window: an activation event carries whatever the
+--- app's focused window was at the time, which after an unminimize is not yet
+--- the window the hotkey raised (measured).
 function M.claimInputSource(app)
   local pending = intent
   if not pending or not app or app:bundleID() ~= pending.bundle then
@@ -244,8 +223,8 @@ end
 -- spec.placesNew    — true when something else already positions new windows
 -- spec.byAppAlone() — optional; false when the app's process does not identify
 --                     these windows by itself, as for one browser profile of several
--- spec.frontmost()  — optional; true when the whole app has focus and a press
---                     should put it away even with no window of its focused
+-- spec.hidesWhenFrontmost — true when a press should put the app away whenever
+--                     it holds focus, even with no window of its own focused
 
 -- Timers for windows that do not exist yet. Held, because hs.timer keeps no
 -- registry and would collect them; keyed by spec.id so a press replaces rather
@@ -436,6 +415,11 @@ function M.toggle(spec)
 
   local focused = hs.window.focusedWindow()
   local windows = windowsWithFocused(spec, focused)
+  -- Read before anything is raised: an app that already holds focus gets its
+  -- layout switched at once, because no activation event will follow and the
+  -- app being typed in is the one asked for.
+  local front = hs.application.frontmostApplication()
+  local hadFocus = front ~= nil and front:bundleID() == spec.bundle
 
   if #windows == 0 then
     local elsewhere = M.fullScreenWindow(spec)
@@ -468,9 +452,8 @@ function M.toggle(spec)
 
   -- The app has focus but not through one of these windows — a dialog, a panel,
   -- Finder's desktop. The press still means "put it away".
-  local frontmost = spec.frontmost and spec.frontmost()
-  if frontmost then
-    frontmost:hide()
+  if hadFocus and spec.hidesWhenFrontmost then
+    front:hide()
     return
   end
 
@@ -499,6 +482,9 @@ function M.toggle(spec)
 
   if spec.inputSource then
     M.requestInputSource(spec.bundle, spec.inputSource)
+    if hadFocus and M.onFocus then
+      M.onFocus(win)
+    end
   end
 end
 
@@ -582,10 +568,7 @@ function M.bindToggle(key, bundleID, layoutFn, opts)
     layout = layoutFn,
     inputSource = inputSource,
     placesNew = opts.watchCreate == true,
-    frontmost = function()
-      local app = runningApp(bundleID)
-      return app and app:isFrontmost() and app or nil
-    end,
+    hidesWhenFrontmost = true,
   }
 
   hs.hotkey.bind(M.hyper, key, function()

@@ -172,6 +172,9 @@ _G.hs = {
     nameForBundleID = function(bundle)
       return _G.NAMES and _G.NAMES[bundle] or nil
     end,
+    frontmostApplication = function()
+      return _G.FRONTMOST
+    end,
     get = function(bundle)
       local apps = _G.APPS[bundle]
       return apps and apps[1] or nil
