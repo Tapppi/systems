@@ -32,8 +32,8 @@ The repository structure is based on [dustinlyons/nixos-config](https://github.c
     proceeds: the nix-rosetta-builder Linux builder, neovim (built from
     `flakes/nvim`), neovide wrapped to launch that exact neovim, `herdr` and
     its config, `codex` and its system defaults, `opencode`, `pi-coding-agent`,
-    the `session-sync` launchd agent, Hammerspoon (application,
-    configuration, link routing and hotkeys, see
+    the `session-sync` launchd agent, Hammerspoon (application, configuration,
+    link routing and hotkeys, see
     `modules/darwin/hammerspoon/README.md`), and the Determinate Nix
     accommodations. Everything else on that machine is owned by `macos-setup` —
     check there before assuming something is managed here.
