@@ -251,8 +251,9 @@ counts as a mismatch**: on the first switch the running instance never loaded `h
 exactly the run that must restart. That one verdict gates the reload and the handler claim. The restart re-asserts
 `MJConfigFile` after the kill, since a terminating app can flush a stale cached value back.
 
-**`luaDir` defaults to the main checkout, so git operations there are deploys.** Any `*.lua` write reloads the running
-config — a `checkout`, `stash` or rebase included — and checking out a tree without the module leaves the hotkeys gone
-until a manual reload. Worktree edits do not reload. Activating an unmerged branch needs `local.hammerspoon.luaDir`
-overridden; activation checks the directory exists and otherwise leaves the running instance alone, since nix cannot
-see a missing out-of-store target.
+**`luaDir` defaults to the main checkout, so git operations there are deploys.** That is deliberate: experiments in the
+main checkout run live, and work belongs in a worktree. Any `*.lua` write reloads the running config — a `checkout`,
+`stash` or rebase included — and checking out a tree without the module leaves the hotkeys gone until a manual reload.
+Worktree edits do not reload. Activating an unmerged branch needs `local.hammerspoon.luaDir` overridden; activation
+checks the directory exists and otherwise leaves the running instance alone, since nix cannot see a missing
+out-of-store target.
