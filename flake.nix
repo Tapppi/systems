@@ -80,6 +80,16 @@
           '';
         };
       };
+      # Stamp every host with the commit it was built from. Deploys run from an
+      # agent worktree branch rather than from main, so a host is the only place
+      # that records which branch actually won; scripts/deploy-preflight.sh reads
+      # this back over SSH and refuses to overwrite a host running something the
+      # deploying branch does not contain. `dirtyRev` covers uncommitted deploys,
+      # which are unreconstructable and flagged as such.
+      revision = {
+        system.configurationRevision = self.rev or self.dirtyRev or null;
+      };
+
       mkApp = scriptName: system: {
         type = "app";
         program = "${(nixpkgs.legacyPackages.${system}.writeScriptBin scriptName ''
@@ -205,6 +215,7 @@
             inputs.nix-rosetta-builder.darwinModules.default
             home-manager.darwinModules.home-manager
             ./hosts/darwin-minimal
+            revision
           ];
         };
       };
@@ -230,7 +241,7 @@
         dogmatix = nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           specialArgs = inputs // { inherit inputs; };
-          modules = [ ./hosts/nixos/dogmatix ];
+          modules = [ ./hosts/nixos/dogmatix revision ];
         };
 
         # automatix — the 2018 MacBook Pro, an Apple T2 machine, run headless
@@ -246,6 +257,7 @@
             # `nixos-anywhere --vm-test` builds.
             disko.nixosModules.disko
             ./hosts/nixos/automatix
+            revision
           ];
         };
 
@@ -256,7 +268,7 @@
         tts = nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           specialArgs = inputs // { inherit inputs; };
-          modules = [ ./hosts/nixos/tts ];
+          modules = [ ./hosts/nixos/tts revision ];
         };
 
         # The archive guest: agent session transcripts mirrored off the Macs
@@ -266,7 +278,7 @@
         arkisto = nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           specialArgs = inputs // { inherit inputs; };
-          modules = [ ./hosts/nixos/arkisto ];
+          modules = [ ./hosts/nixos/arkisto revision ];
         };
 
         # Workflow-engine bench guests: NixOS LXC system containers under
@@ -277,22 +289,22 @@
         bench-absurd = nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           specialArgs = inputs // { inherit inputs; };
-          modules = [ ./hosts/nixos/bench-absurd ];
+          modules = [ ./hosts/nixos/bench-absurd revision ];
         };
         bench-load = nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           specialArgs = inputs // { inherit inputs; };
-          modules = [ ./hosts/nixos/bench-load ];
+          modules = [ ./hosts/nixos/bench-load revision ];
         };
         bench-obs = nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           specialArgs = inputs // { inherit inputs; };
-          modules = [ ./hosts/nixos/bench-obs ];
+          modules = [ ./hosts/nixos/bench-obs revision ];
         };
         bench-temporal = nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           specialArgs = inputs // { inherit inputs; };
-          modules = [ ./hosts/nixos/bench-temporal ];
+          modules = [ ./hosts/nixos/bench-temporal revision ];
         };
 
         # SSH-enabled installer image for headless host onboarding: boots with
