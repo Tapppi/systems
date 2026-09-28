@@ -12,3 +12,5 @@ See `10-feather-font.nix` for an example.
 The shared NixOS module loads it automatically. The minimal Darwin host,
 its Rosetta guest, and the installer module opt in explicitly because they
 do not import that shared module. Remove those imports with the overlay.
+The Darwin host also substitutes the fixed rsync into nix-darwin's separate
+uninstaller configuration while the override is needed.

@@ -27,6 +27,18 @@ let
   # nvim from the flake's nvim input (nixCats-built package).
   nvim = inputs.nvim.packages.${pkgs.stdenv.hostPlatform.system}.default;
 
+  # nix-darwin's uninstaller evaluates a separate, overlay-free system. Its
+  # shell scripts must use the fixed rsync too. Rewriting that dependency
+  # preserves the upstream uninstaller instead of copying its implementation.
+  # replaceDependency rewrites transitively, including the embedded system.
+  baseRsync = inputs.nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.rsync;
+  needsRsyncOverride = pkgs.rsync.version != baseRsync.version;
+  darwinUninstaller = pkgs.replaceDependency {
+    drv = pkgs.callPackage "${inputs.darwin}/pkgs/darwin-uninstaller" { };
+    oldDependency = baseRsync;
+    newDependency = pkgs.rsync;
+  };
+
   # Neovide resolves plain `nvim` from $PATH by default, which is wrong in two
   # ways here. Launched from Finder/Dock/Spotlight it inherits launchd's PATH
   # (/usr/bin:/bin:/usr/sbin:/sbin), where no nvim exists at all — and macos-setup's
@@ -77,7 +89,9 @@ in
     ../../modules/darwin/hammerspoon
   ];
 
-  environment.systemPackages = [ nvim neovide ];
+  environment.systemPackages = [ nvim neovide ] ++ lib.optional needsRsyncOverride darwinUninstaller;
+
+  system.tools.darwin-uninstaller.enable = lib.mkIf needsRsyncOverride false;
 
   # This host does not import modules/shared, which loads overlays on NixOS.
   nixpkgs.overlays = [ (import ../../overlays/20-rsync.nix) ];
