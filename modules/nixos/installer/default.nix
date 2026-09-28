@@ -50,6 +50,9 @@ in
     "${modulesPath}/installer/cd-dvd/installation-cd-minimal.nix"
   ];
 
+  # Installer images do not import the shared module's overlay loader.
+  nixpkgs.overlays = [ (import ../../../overlays/20-rsync.nix) ];
+
   # Reachable as konehuone-installer.local the moment it boots.
   networking.hostName = lib.mkDefault "konehuone-installer";
 

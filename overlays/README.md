@@ -8,3 +8,7 @@ Files in this directory run automatically as part of each build. Some common way
 
 See `10-feather-font.nix` for an example.
 
+`20-rsync.nix` temporarily supplies rsync 3.5.1 until nixpkgs catches up.
+The shared NixOS module loads it automatically. The minimal Darwin host,
+its Rosetta guest, and the installer module opt in explicitly because they
+do not import that shared module. Remove those imports with the overlay.

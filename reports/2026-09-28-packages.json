@@ -2,14 +2,91 @@
   "date": "2026-09-28",
   "pin_commit": "3d0fc9f",
   "tools_commit": "d83d28f",
+  "rsync_override": {
+    "version": "3.5.1",
+    "source": "https://download.samba.org/pub/rsync/src/rsync-3.5.1.tar.gz",
+    "hash": "sha256-xV+cncEPuL7Dl7OZoP3e1TzJotjjCJG7DWNyTSXDe+8=",
+    "overlay": "overlays/20-rsync.nix",
+    "version_coverage": {
+      "asterix": {
+        "rrsync": "3.5.1",
+        "rsync": "3.5.1"
+      },
+      "nixos": {
+        "aarch64-linux": {
+          "rrsync": "3.5.1",
+          "rsync": "3.5.1"
+        },
+        "arkisto": {
+          "rrsync": "3.5.1",
+          "rsync": "3.5.1"
+        },
+        "automatix": {
+          "rrsync": "3.5.1",
+          "rsync": "3.5.1"
+        },
+        "bench-absurd": {
+          "rrsync": "3.5.1",
+          "rsync": "3.5.1"
+        },
+        "bench-load": {
+          "rrsync": "3.5.1",
+          "rsync": "3.5.1"
+        },
+        "bench-obs": {
+          "rrsync": "3.5.1",
+          "rsync": "3.5.1"
+        },
+        "bench-temporal": {
+          "rrsync": "3.5.1",
+          "rsync": "3.5.1"
+        },
+        "dogmatix": {
+          "rrsync": "3.5.1",
+          "rsync": "3.5.1"
+        },
+        "konehuone-installer": {
+          "rrsync": "3.5.1",
+          "rsync": "3.5.1"
+        },
+        "konehuone-installer-t2": {
+          "rrsync": "3.5.1",
+          "rsync": "3.5.1"
+        },
+        "tts": {
+          "rrsync": "3.5.1",
+          "rsync": "3.5.1"
+        },
+        "x86_64-linux": {
+          "rrsync": "3.5.1",
+          "rsync": "3.5.1"
+        }
+      }
+    }
+  },
   "main_pin": {
     "before": "241313f4e8e508cb9b13278c2b0fa25b9ca27163",
     "after": "44a91898084f46797b5fac650c7e8c9ac38c43d4"
   },
   "scope": "Configured system packages, enabled services, selected service runtimes and changed Neovim tools. Includes the earlier coding-tools refresh. Not a complete inventory of transitive libraries or every plugin.",
   "validation": {
+    "rsync_tests": {
+      "aarch64-darwin": {
+        "passed": 237,
+        "skipped": 121
+      },
+      "x86_64-linux": {
+        "passed": 247,
+        "skipped": 104
+      },
+      "aarch64-linux": {
+        "passed": 246,
+        "skipped": 105
+      },
+      "local_transfer_regressions": "symlinked source ancestor, external files-from path and --max-alloc=0 passed"
+    },
     "flake_check": "passed on aarch64-darwin",
-    "darwin_build": "passed including Rosetta disk image",
+    "darwin_build": "in progress; rsync packages passed on all three architectures",
     "neovim_startup": "passed, 0.12.5",
     "nixos_evaluation": "10 hostname-keyed configurations passed; no NixOS deployment"
   },
@@ -410,32 +487,33 @@
     {
       "name": "rrsync",
       "old": "3.4.4",
-      "new": "3.5.0",
+      "new": "3.5.1",
       "hosts": [
         "arkisto"
       ],
       "homepage": "https://rsync.samba.org/",
       "description": "Helper to run rsync-only environments from ssh-logins",
-      "headline": "Stricter restricted-directory confinement",
-      "detail": "The restricted SSH wrapper gains inode-pinned paths and stronger option restrictions on Linux.",
-      "caution": "Arkisto uses rrsync for incoming archives. Upstream 3.5.1 also fixes restricted-root paths; this snapshot remains at 3.5.0. Verify a representative restricted transfer before deployment.",
+      "headline": "Restricted-root paths fixed in 3.5.1",
+      "detail": "The restricted SSH wrapper now includes the 3.5.1 root-relative path fixes, alongside the 3.5 security hardening. Arkisto inherits the same pinned rsync source and binary.",
+      "caution": "Unsafe-option restrictions from the 3.5 line remain. The packaged rsync tests exercise restricted-root paths; no live archive transfer or host deployment was performed.",
       "sources": [
         {
           "title": "Upstream notes",
-          "url": "https://download.samba.org/pub/rsync/NEWS#3.5.0"
+          "url": "https://download.samba.org/pub/rsync/NEWS#3.5.1"
         }
       ],
       "kind": "feature",
       "group": "arkisto",
-      "id": "rrsync-3-5-0",
+      "id": "rrsync-3-5-1",
       "priority": 1
     },
     {
       "name": "rsync",
       "old": "3.4.4",
-      "new": "3.5.0",
+      "new": "3.5.1",
       "hosts": [
         "arkisto",
+        "asterix",
         "automatix",
         "bench-absurd",
         "bench-load",
@@ -446,18 +524,19 @@
       ],
       "homepage": "https://rsync.samba.org/",
       "description": "Fast incremental file transfer utility",
-      "headline": "Security hardening changes path handling",
-      "detail": "3.5.0 hardens symlink traversal, transfers and restricted-server paths. This is a substantial security update within the 3.x line.",
-      "caution": "Upstream 3.5.1 fixes 3.5.0 regressions involving symlinked ancestors, --files-from and special descriptor paths. It was released September 21, after this snapshot. Test representative archive transfers before deploying to arkisto.",
+      "headline": "Path-handling regressions fixed in 3.5.1",
+      "detail": "Adds the 3.5.1 fixes for symlinked sender ancestors, operator-supplied --files-from paths and descriptor streams, while retaining 3.5 security hardening. Protocol 33 adds logical-block statistics.",
+      "caution": "The 3.5 line still enforces stricter path confinement. The known 3.5.0 regressions are fixed here through a source-pinned overlay; the base nixpkgs snapshot remains September 20.",
       "sources": [
         {
           "title": "Upstream notes",
-          "url": "https://download.samba.org/pub/rsync/NEWS#3.5.0"
+          "url": "https://download.samba.org/pub/rsync/NEWS#3.5.1"
         }
       ],
       "kind": "feature",
+      "role": "On asterix: the session-sync job and Rosetta guest. A separately installed Homebrew rsync is outside this configuration.",
       "group": "common",
-      "id": "rsync-3-5-0",
+      "id": "rsync-3-5-1",
       "priority": 1
     },
     {
@@ -1389,7 +1468,7 @@
       "description": "The Linux kernel (with patches: bridge-stp-helper, request-key-helper)",
       "role": "On asterix: Rosetta guest kernel.",
       "headline": "Kernel 6.18 maintenance refresh",
-      "detail": "Updates dogmatix’s kernel and the Linux kernel inside asterix’s Rosetta builder. It does not replace the macOS kernel. The rebuilt Rosetta disk image passed the full system build.",
+      "detail": "Updates dogmatix’s kernel and the Linux kernel inside asterix’s Rosetta builder. It does not replace the macOS kernel. The Rosetta disk image is being rebuilt with the rsync override.",
       "caution": "",
       "sources": [
         {
@@ -5432,6 +5511,12 @@
           "homepage": "https://github.com/lima-vm/lima",
           "name": "lima",
           "version": "2.2.0"
+        },
+        {
+          "description": "Fast incremental file transfer utility",
+          "homepage": "https://rsync.samba.org/",
+          "name": "rsync",
+          "version": "3.5.1"
         }
       ]
     },
@@ -5478,7 +5563,7 @@
           "description": "Fast incremental file transfer utility",
           "homepage": "https://rsync.samba.org/",
           "name": "rsync",
-          "version": "3.5.0"
+          "version": "3.5.1"
         },
         {
           "description": "Command line tool for transferring files with URL syntax",
@@ -6228,7 +6313,7 @@
           "description": "Fast incremental file transfer utility",
           "homepage": "https://rsync.samba.org/",
           "name": "rsync",
-          "version": "3.5.0"
+          "version": "3.5.1"
         },
         {
           "description": "System call tracer for Linux",
@@ -6438,6 +6523,12 @@
           "homepage": "https://github.com/lima-vm/lima",
           "name": "lima",
           "version": "2.1.4"
+        },
+        {
+          "description": "Fast incremental file transfer utility",
+          "homepage": "https://rsync.samba.org/",
+          "name": "rsync",
+          "version": "3.4.4"
         }
       ]
     },
@@ -6598,7 +6689,7 @@
           "description": "Fast incremental file transfer utility",
           "homepage": "https://rsync.samba.org/",
           "name": "rsync",
-          "version": "3.5.0"
+          "version": "3.5.1"
         },
         {
           "description": "Network diagnostics tool",
@@ -7564,7 +7655,7 @@
           "description": "Fast incremental file transfer utility",
           "homepage": "https://rsync.samba.org/",
           "name": "rsync",
-          "version": "3.5.0"
+          "version": "3.5.1"
         },
         {
           "description": "System call tracer for Linux",
@@ -9200,7 +9291,7 @@
           "description": "Fast incremental file transfer utility",
           "homepage": "https://rsync.samba.org/",
           "name": "rsync",
-          "version": "3.5.0"
+          "version": "3.5.1"
         },
         {
           "description": "System call tracer for Linux",
@@ -9266,7 +9357,7 @@
           "description": "Helper to run rsync-only environments from ssh-logins",
           "homepage": "https://rsync.samba.org/",
           "name": "rrsync",
-          "version": "3.5.0"
+          "version": "3.5.1"
         }
       ]
     },
@@ -10656,7 +10747,7 @@
           "description": "Fast incremental file transfer utility",
           "homepage": "https://rsync.samba.org/",
           "name": "rsync",
-          "version": "3.5.0"
+          "version": "3.5.1"
         },
         {
           "description": "System call tracer for Linux",
@@ -11417,7 +11508,7 @@
           "description": "Fast incremental file transfer utility",
           "homepage": "https://rsync.samba.org/",
           "name": "rsync",
-          "version": "3.5.0"
+          "version": "3.5.1"
         },
         {
           "description": "System call tracer for Linux",
@@ -12939,7 +13030,7 @@
           "description": "Fast incremental file transfer utility",
           "homepage": "https://rsync.samba.org/",
           "name": "rsync",
-          "version": "3.5.0"
+          "version": "3.5.1"
         },
         {
           "description": "System call tracer for Linux",
@@ -14407,7 +14498,7 @@
           "description": "Fast incremental file transfer utility",
           "homepage": "https://rsync.samba.org/",
           "name": "rsync",
-          "version": "3.5.0"
+          "version": "3.5.1"
         },
         {
           "description": "System call tracer for Linux",
@@ -15138,7 +15229,7 @@
           "description": "Fast incremental file transfer utility",
           "homepage": "https://rsync.samba.org/",
           "name": "rsync",
-          "version": "3.5.0"
+          "version": "3.5.1"
         },
         {
           "description": "System call tracer for Linux",

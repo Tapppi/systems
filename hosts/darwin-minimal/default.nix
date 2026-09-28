@@ -79,6 +79,9 @@ in
 
   environment.systemPackages = [ nvim neovide ];
 
+  # This host does not import modules/shared, which loads overlays on NixOS.
+  nixpkgs.overlays = [ (import ../../overlays/20-rsync.nix) ];
+
   # --- home-manager ---
   # Host-wide settings live here. A module under modules/darwin/ may add
   # home.file entries, but must not set any of these — the next one that did
@@ -142,6 +145,9 @@ in
   nix-rosetta-builder = {
     onDemand = true;
     onDemandLingerMinutes = 15;
+    potentiallyInsecureExtraNixosModule.nixpkgs.overlays = [
+      (import ../../overlays/20-rsync.nix)
+    ];
   };
 
   # --- Four Determinate-Nix accommodations (mirrored from ../darwin/default.nix;
