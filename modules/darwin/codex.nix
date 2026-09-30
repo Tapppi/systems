@@ -10,14 +10,15 @@
 # this module never writes to it. Existing user keys keep winning, so on a
 # machine that already has a user file the owner deletes the overlapping keys
 # once — model, model_reasoning_effort, model_provider, model_context_window,
-# model_auto_compact_token_limit, approvals_reviewer and the [features] flags —
-# to adopt these defaults; Codex rewrites model/effort/features only when they
-# are changed in the TUI, which is the behaviour wanted.
+# model_auto_compact_token_limit, approvals_reviewer, sandbox_mode, web_search
+# and the [features] flags — to adopt these defaults; Codex rewrites
+# model/effort/features only when they are changed in the TUI, which is the
+# behaviour wanted.
 # Only owner intent goes here: model, effort, provider, window, auto-compact,
-# approvals and feature flags. Everything the app writes for itself — project
-# trust, TUI state, hook hashes, marketplaces, plugins, node_repl trust, the
-# desktop block, and the MCP server table with its credentials — stays in the
-# user file and out of the world-readable store.
+# approvals, sandbox mode, web search and feature flags. Everything the app
+# writes for itself — project trust, TUI state, hook hashes, marketplaces,
+# plugins, node_repl trust, the desktop block, and the MCP server table with
+# its credentials — stays in the user file and out of the world-readable store.
 #
 # The package puts three binaries on PATH: codex, codex-code-mode-host and a
 # generically named logs_client. Nothing else provides the last one today.
@@ -31,12 +32,14 @@ in
 
   environment.etc."codex/config.toml".text = ''
     # Managed by systems/modules/darwin/codex.nix. User settings override these defaults.
-    model = "gpt-6-astra"
+    model = "gpt-6.1-sol"
     model_reasoning_effort = "medium"
     model_provider = "openai"
-    model_context_window = 1000000
+    model_context_window = 700000
     model_auto_compact_token_limit = 700000
     approvals_reviewer = "auto_review"
+    sandbox_mode = "workspace-write"
+    web_search = "indexed"
 
     # The binary comes from the nix store and cannot rewrite itself, so a
     # startup check can only advertise an update it cannot apply.
