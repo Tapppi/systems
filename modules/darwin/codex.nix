@@ -36,7 +36,7 @@ in
     model_reasoning_effort = "medium"
     model_provider = "openai"
     model_context_window = 700000
-    model_auto_compact_token_limit = 700000
+    model_auto_compact_token_limit = 550000
     approvals_reviewer = "auto_review"
     sandbox_mode = "workspace-write"
     web_search = "indexed"
