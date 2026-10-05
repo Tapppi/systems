@@ -4,8 +4,8 @@ This document provides AI agents with context and guidelines for working with th
 
 ## External File Loading
 
-CRITICAL: When you encounter a file reference (e.g., `@flakes/nvim/AGENTS.md`), use your Read tool to load it on a
-need-to-know basis. They're relevant to the SPECIFIC task at hand.
+CRITICAL: When you encounter a file reference (e.g., [flakes/nvim/AGENTS.md](flakes/nvim/AGENTS.md)), use your Read
+tool to load it on a need-to-know basis. They're relevant to the SPECIFIC task at hand.
 
 Instructions:
 
@@ -62,7 +62,7 @@ The repository structure is based on [dustinlyons/nixos-config](https://github.c
     `systems` becomes a module library.
 - **NixOS Configuration**: Placeholder/untested
   - Not being actively worked on, but shared functionality kept in sync as "best effort" to reduce eventual work
-- **Neovim Configuration**: Fully functional, more information in @flakes/nvim/AGENTS.md
+- **Neovim Configuration**: Fully functional, more information in [flakes/nvim/AGENTS.md](flakes/nvim/AGENTS.md)
 
 ## Architecture
 
@@ -74,6 +74,7 @@ The repository structure is based on [dustinlyons/nixos-config](https://github.c
 │   ├── aarch64-darwin/
 │   ├── aarch64-linux/  # symlink to x86_64-linux
 │   └── x86_64-linux/
+├── docs/           # Repository docs (deploys.md: deploying to hosts and the preflight check)
 ├── flakes/         # Standalone flake configurations
 │   └── nvim/       # Neovim configuration (with its own detailed AGENTS.md file, see "Neovim Configuration" section)
 ├── hosts/          # Host-specific configurations
@@ -109,7 +110,8 @@ output exists** — not a `darwinConfiguration`, not an app, not a devShell — 
 ### Overlays
 
 The overlays in `overlays/` apply patches on top of every build, allowing for workarounds like using a different
-version or a fork of a package. See the `@overlays/README.md` for more information when there is need for a workaround.
+version or a fork of a package. See [overlays/README.md](overlays/README.md) for more information when there is need
+for a workaround.
 See `overlays/10-feather-font.nix` for an example of an overlay.
 
 ## Code Style and Formatting
@@ -173,7 +175,8 @@ nix run .#build         # build only, activates nothing
 nix run .#build-switch  # build and activate (prompts for sudo)
 nix run .#rollback      # list generations, pick one, activate it
 
-# NixOS hosts — push-based, run from asterix, keyed by hostname
+# NixOS hosts — push-based, run from asterix, keyed by hostname; preflight every time
+scripts/deploy-preflight.sh <host>
 nix run nixpkgs#nixos-rebuild -- switch --flake .#<host> --target-host root@<host>
 ```
 
@@ -200,20 +203,23 @@ must not be used.** It is the upstream starter's: it resolves the target from
 `uname -m` and switches to `nixosConfigurations.<arch>`, the untested
 placeholder, rather than to a hostname-keyed host like `dogmatix`. That
 placeholder's `keys` list is empty, so activating it would leave a host with no
-authorized SSH keys. It is currently non-executable, which is the only reason
-that has not happened. Real NixOS deploys are push-based (HLB-9) via remote
-`nixos-rebuild` as above; new hosts are onboarded with `nixos-anywhere` per
-ADR-001.
+authorized SSH keys. It is non-executable, and `.claude/hooks/deploy-guard.sh`
+denies it. Real NixOS deploys are push-based (HLB-9) via remote `nixos-rebuild`
+as above, straight from the branch you are on and always behind
+`scripts/deploy-preflight.sh` — see [docs/deploys.md](docs/deploys.md). New
+hosts are onboarded with `nixos-anywhere` per ADR-001.
 
 `darwinConfigurations` contains hostname-keyed entries only. The upstream
 starter's per-architecture placeholder is no longer instantiated — see
 "Project Status" for where that tree now lives.
 
-**Never activate without the user explicitly asking.** `nix run .#build-switch`,
-`darwin-rebuild switch`, and `nixos-rebuild` change live system state and are the
-user's call, not an agent's. Building is not activating: `nix run .#build`,
-`nix build`, `nix eval` and `nix flake check` are all safe and are the way to
-verify a change before proposing it.
+**Activation is the user's call, not an agent's.** `nix run .#build-switch`,
+`nix run .#rollback` and `darwin-rebuild switch` change live system state and need
+interactive sudo: an agent never runs them, and `.claude/hooks/deploy-guard.sh`
+denies them. A `nixos-rebuild` deploy also changes a live machine, so an agent
+runs one only when the user explicitly asked, after preflight. Building is not
+activating: `nix run .#build`, `nix build`, `nix eval` and `nix flake check` are
+all safe and are the way to verify a change before proposing it.
 
 ### The Linux builder (asterix)
 
@@ -296,84 +302,52 @@ Unused upstream starter — imported only by the never-activated `hosts/darwin/`
 
 ## Guidelines for AI Agents
 
-### Agent worktrees
+### Git workflows
 
-**Agent sessions that change this repo work in a git worktree, not in the main
-checkout.**
+Git work here follows the `ikeh-git:git-workflows` skill, which `.claude/settings.json` enables: load it before the
+first commit of any change, and before any push, merge, PR or deploy. It carries the never-list and four landing
+flows — PR with user review (the default), autonomous PR, local merge, direct on main — each with its own guardrails.
+What this repository adds:
 
-The main checkout is the user's: it is where `nix run .#build-switch` runs,
-where diffs get reviewed, and where activation happens. `build-switch` builds
-*whatever is in the working tree*, committed or not, so an agent's in-flight
-edits there can land in a live system generation nobody chose to activate —
-and with more than one session in the repo at once, their commits land mixed
-into each other's in-progress work.
+- **Work in a worktree** under `.claude/worktrees/` on an `agent/<topic>` branch. The main checkout is the user's: it
+  is where `nix run .#build-switch` runs, and `build-switch` builds *whatever is in the working tree*, committed or
+  not, so an edit left there can reach a live system generation nobody chose to activate.
+- **Other sessions leave work staged in the main checkout** — that is the never-list's reason for rule 1 here.
+  Commit only your own files, by explicit path: `git commit -- <paths>`.
+- **Never activate macOS configuration.** `nix run .#build-switch`, `nix run .#rollback` and `darwin-rebuild switch`
+  need interactive sudo this session does not have, and activating is the user's call. Build, then hand over.
+- **Never deploy without `scripts/deploy-preflight.sh <host>`**, or past its refusal. Deploying is separate from
+  landing: a NixOS host deploys straight from the worktree branch, when the user asked for the deploy, and nothing
+  has to reach `main` first. See [docs/deploys.md](docs/deploys.md).
+- **Verify with the build.** The checks before a push are `nix flake check` and `nix build` of every host you
+  touched; building never activates anything, so it is always safe.
+- **Nix sees only tracked files.** A new file must be `git add`ed before `nix build` can see it, and that staging is
+  what leaves the index dirty: stage what nix needs, then clear the index or scope the command
+  (`git commit -- <paths>`) before committing or reverting.
+- **Branch from local `HEAD`.** `.claude/settings.json` sets `worktree.baseRef` to `head`, so a worktree started from
+  a feature branch builds on that branch rather than on `main`.
 
-```bash
-# Create and enter. The EnterWorktree tool does the same thing and puts it in
-# the same place; `.claude/worktrees/` is gitignored.
-git worktree add .claude/worktrees/<topic> -b agent/<topic>
+A worktree is a full checkout with its own index, so `nix build`, `nix flake check`, `nix eval` and the VM tests all
+work inside one exactly as they do in the main checkout — flake evaluation follows the working directory, not the git
+root. Worktrees live under `.claude/` by convention because that is where the harness creates them; a sibling
+directory outside the repo works equally well. A subagent that needs its own workspace branches a nested worktree off
+the worktree already in use, not off `main`.
 
-# Work, build and test there. Commit scoped by path, and verify each commit
-# with `git show --stat HEAD`.
-```
+#### Enforcement
 
-**Default: stop there and leave the branch for the user to review and merge**
-— this repo carries config for real machines, and review-before-merge plays
-the role a PR would. The one authorized exception is work explicitly set up
-as unattended background work that includes a deploy: the deploy tooling
-reads from main, not a branch, so in that case only, merge the worktree
-branch into main, deploy (`nix run .#build-switch` on darwin,
-`nixos-rebuild switch --flake .#<host> --target-host root@<host>` for a NixOS
-host — see "Building Configurations"), then resume in the worktree — the same
-one or a fresh one — to keep going. This is a statement of current policy,
-not a claim it is pleasant for fast iteration; the ergonomics of that
-exception are an open question tracked in tieto's ikeh follow-ups, not
-settled here.
-
-Either way, land with a rebase rather than a `--no-ff` merge commit — nothing
-here races an external auto-committer for main the way tieto's obsidian-git
-does, so linear history costs nothing:
-
-```bash
-# Reviewed case (the default): the worktree's own commits are already the
-# reviewable units, so keep them — just linearize.
-git -C .claude/worktrees/<topic> rebase main
-git merge --ff-only agent/<topic>
-
-# Background-work exception: nobody reviewed the individual commits, so
-# squash to one first. That keeps history linear while still leaving a
-# single commit as the revert point — the property a --no-ff merge commit
-# would otherwise buy.
-git -C .claude/worktrees/<topic> reset --soft main
-git -C .claude/worktrees/<topic> commit
-git merge --ff-only agent/<topic>
-
-git worktree remove .claude/worktrees/<topic> && git branch -d agent/<topic>
-```
-
-A subagent that needs its own workspace branches a nested worktree off the
-worktree already in use, not off main — reserve this for work big enough that
-the existing parallel-work conventions, without a nested worktree, stop being
-enough.
-
-A worktree is a full checkout with its own index, so `nix build`,
-`nix flake check`, `nix eval` and the VM tests all work inside one exactly as
-they do in the main checkout — flake evaluation follows the working directory,
-not the git root. Two things do not move with it:
-
-- **Activation is the main checkout's.** `nix run .#build-switch` from a
-  worktree would activate an unmerged branch. Build and check in the worktree;
-  merge first, then let the user activate.
-- **Remote deploys likewise** — `nixos-rebuild --target-host` pushes a closure
-  built from the working tree to a real machine, so it is subject to the same
-  rule, on top of the "never activate without being asked" one below.
-
-Worktrees live under `.claude/` by convention because that is where the harness
-creates them. A sibling directory outside the repo works equally well.
-
-Small single-file edits made while an operator is watching do not need a
-worktree. Anything long-running, anything backgrounded, and anything that will
-accumulate uncommitted state does.
+- **ikeh-git's worktree guard** denies whole-tree staging in the main checkout and any rebase of `main`.
+- **ikeh-git's push guard** pre-approves pushing an `agent/` branch to `origin` from a linked worktree (`pushGuard`
+  in `.claude/settings.json`, with `requireWorktree` on). Every other push prompts, any push from the main checkout
+  included. Push only when the flow calls for it.
+- **`.claude/hooks/deploy-guard.sh`**, this repository's own hook, denies darwin activation and the upstream
+  starter's linux apps, and reminds you of preflight on every `nixos-rebuild switch`, `boot` or `test`. It matches
+  command text, so it also fires on a commit message that names one of those commands; pass such a message with
+  `git commit -F <file>`. Its verdict table is `.claude/hooks/deploy-guard-test.sh`; run it after changing the guard.
+- **The ask floor** in `.claude/settings.json` prompts for any push whose text names `main` or `master`, so keep both
+  words out of branch names. It is the backstop for a machine where the plugin's hooks do not run: committed
+  enablement installs nothing, and without the ikeh marketplace registered and `ikeh-git@ikeh` installed
+  (`claude plugin install ikeh-git@ikeh --scope local`, from the main checkout) neither ikeh-git guard runs. The
+  rules bind regardless.
 
 ### When Making Changes
 
@@ -445,13 +419,19 @@ The repository uses a two-tier approach for package management:
 - Remember home-manager and system configs are separate
 - macOS-specific features require darwin modules, not nixos
 - Test on target architecture (aarch64 vs x86_64)
+- `nix build … | tail` reports the pipe's exit status, not nix's, so a failed build reads as success. Redirect to a
+  file and check the exit status instead: `nix build … >/tmp/build.out 2>&1; echo "EXIT=$?"`
+- `--extra-substituters` on the command line is accepted and then silently ignored unless your user is in
+  `trusted-users`, and `nix config show` reports the cache active either way. Put caches in the configuration
+  (`nix.settings.extra-substituters`, or `nix.custom.conf` on the Determinate Mac)
 - Ensure home-manager input version matches nixpkgs channel (both unstable)
   - Check `flake.lock` if home-manager evaluation fails
   - Errors for mismatched versions are expected when the version number of home-manager and nixpkgs on unstable diverge
 
 ## Neovim Configuration
 
-See `@flakes/nvim/AGENTS.md` for detailed guidelines that take priority when working with Neovim configuration.
+See [flakes/nvim/AGENTS.md](flakes/nvim/AGENTS.md) for detailed guidelines that take priority when working with
+Neovim configuration.
 Key points:
 
 - Standalone flake in `flakes/nvim/`
