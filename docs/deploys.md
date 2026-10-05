@@ -22,7 +22,7 @@ A deploy changes a live machine, so it runs only when the user asked for it, whi
 
 `.claude/hooks/deploy-guard.sh` denies darwin activation and the upstream starter's linux apps and `apply` script, and
 asks the user to approve every `nixos-rebuild switch`, `boot` or `test`, with the preflight reminder in the prompt. It
-matches those words anywhere in a command, whatever wraps or quotes them, and lets through only calls made of
+matches those words anywhere in a command, whatever wraps or quotes them, and lets through only single-line calls made of
 read-only programs such as `cat` and `rg`. It also asks when it cannot read a call's command, for instance without
 `jq`, and the call carries one of those words.
 

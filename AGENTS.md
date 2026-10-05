@@ -345,7 +345,7 @@ the worktree already in use, not off `main`.
   `nixos-rebuild switch`, `boot` or `test`. It looks for those words anywhere in the command text, after removing
   quotes and backslashes, so `sudo`, `ssh`, `bash -c`, quoted `&` and `;` and split words do not hide them. It
   therefore also fires on a commit message that names one; pass such a message with `git commit -F <file>`. A call
-  made only of read-only programs (`cat`, `rg`, `sed -n`, `git diff`, `git log` and the like, with no `sudo`, `ssh`,
+  on one line made only of read-only programs (`cat`, `rg`, `sed -n`, `git diff`, `git log` and the like, with no `sudo`, `ssh`,
   `xargs`, `env`, `exec`, command substitution or redirection other than to `/dev/null`) is let through, so the
   scripts stay readable. It asks about any call it cannot read, such as one without `jq` or with a command that is
   not a string, that carries one of those words. Its verdict table is `.claude/hooks/deploy-guard-test.sh`; run it
