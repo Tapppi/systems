@@ -216,7 +216,7 @@ starter's per-architecture placeholder is no longer instantiated — see
 **Activation is the user's call, not an agent's.** `nix run .#build-switch`,
 `nix run .#rollback` and `darwin-rebuild switch` change live system state and need
 interactive sudo: an agent never runs them, and `.claude/hooks/deploy-guard.sh`
-denies them. A `nixos-rebuild` deploy also changes a live machine, so an agent
+denies them, as it does a system closure's `activate` script. A `nixos-rebuild` deploy also changes a live machine, so an agent
 runs one only when the user explicitly asked, after preflight. Building is not
 activating: `nix run .#build`, `nix build`, `nix eval` and `nix flake check` are
 all safe and are the way to verify a change before proposing it.
@@ -339,11 +339,16 @@ the worktree already in use, not off `main`.
 - **ikeh-git's push guard** pre-approves pushing an `agent/` branch to `origin` from a linked worktree (`pushGuard`
   in `.claude/settings.json`, with `requireWorktree` on). Every other push prompts, any push from the main checkout
   included. Push only when the flow calls for it.
-- **`.claude/hooks/deploy-guard.sh`**, this repository's own hook, denies darwin activation and the upstream
-  starter's linux apps, and asks the user to approve every `nixos-rebuild switch`, `boot` or `test`. It matches
-  command text, ignoring quotes and wrappers such as `sudo` or `bash -c`, so it also fires on a commit message that
-  names one of those commands; pass such a message with `git commit -F <file>`. It asks about any call it cannot read,
-  such as one without `jq`, that names one of them. Its verdict table is `.claude/hooks/deploy-guard-test.sh`; run it
+- **`.claude/hooks/deploy-guard.sh`**, this repository's own hook, denies darwin activation (the build-switch and
+  rollback apps, `darwin-rebuild` switch, activate, rollback and generation selection, and any `activate` script),
+  denies the upstream starter's linux apps and its `apply` script, and asks the user to approve every
+  `nixos-rebuild switch`, `boot` or `test`. It looks for those words anywhere in the command text, after removing
+  quotes and backslashes, so `sudo`, `ssh`, `bash -c`, quoted `&` and `;` and split words do not hide them. It
+  therefore also fires on a commit message that names one; pass such a message with `git commit -F <file>`. A call
+  made only of read-only programs (`cat`, `rg`, `sed -n`, `git diff`, `git log` and the like, with no `sudo`, `ssh`,
+  `xargs`, `env`, `exec`, command substitution or redirection other than to `/dev/null`) is let through, so the
+  scripts stay readable. It asks about any call it cannot read, such as one without `jq` or with a command that is
+  not a string, that carries one of those words. Its verdict table is `.claude/hooks/deploy-guard-test.sh`; run it
   after changing the guard.
 - **The ask floor** in `.claude/settings.json` prompts for any push whose text names `main` or `master`, so keep both
   words out of branch names. It is the backstop for a machine where the plugin's hooks do not run: committed
