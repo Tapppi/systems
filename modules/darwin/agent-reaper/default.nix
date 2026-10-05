@@ -1,5 +1,10 @@
 # Reaps processes that coding-agent sessions leave running.
 #
+# Temporary: a stopgap for routing work from Claude to Codex through the
+# codex-plugin-cc plugin. Remove this module once ikeh orchestrates through a
+# multi-provider harness instead, and codex-plugin-cc is dropped from the
+# Claude Code configs.
+#
 # The Claude Code codex plugin starts a detached `codex app-server` broker per
 # workspace and stops it only from its SessionEnd hook, which looks up the
 # broker for the session's own cwd. Brokers started for another directory — a
