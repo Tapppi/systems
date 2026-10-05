@@ -26,8 +26,8 @@
 # fires too, as does a Python venv's `bin/activate`; the deny says how to pass
 # such text instead.
 #
-# The one exemption keeps the scripts readable. A call is silent about its
-# words when every simple command in it starts with a read-only program (cat,
+# The one exemption keeps the scripts readable. A single-line call is silent
+# about its words when every simple command in it starts with a read-only program (cat,
 # rg, sed -n, git diff and the like) and nothing in it can run or write another
 # command: no sudo, ssh, xargs, env, exec, command substitution, or redirection
 # other than to /dev/null. `cat apps/<system>/build-switch` is silent;
@@ -199,6 +199,10 @@ read_only_call() {
   # Cheap refusals on the text as written come first, because masking walks it
   # a character at a time. A quoted word refuses too, which only errs safe.
   [[ $1 == *"\$("* || $1 == *'`'* ]] && return 1
+  # A multi-line call is never exempt: a quote inside a comment would otherwise
+  # mask the lines after it. A backslash continuation is not a new line.
+  t=${1//$'\\\n'/}
+  [[ $t == *$'\n'* ]] && return 1
   [[ $1 =~ $ro_unsafe_word ]] && return 1
   [[ $1 =~ $ro_unsafe_option ]] && return 1
   mask_quoted "$1"

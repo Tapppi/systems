@@ -267,6 +267,9 @@ expect_cwd SILENT /Users/tapani/systems/apps/aarch64-darwin 'cat apply' ASK
 expect DENY 'sudo cat apps/aarch64-darwin/build-switch'
 expect DENY 'cat apps/aarch64-darwin/build-switch | sh'
 expect DENY 'cat apps/aarch64-darwin/build-switch | bash -s'
+# A multi-line call is never exempt: a quote in a comment must not hide the next line
+expect DENY $'echo ready # don\'t wait\nnix run .#build-switch'
+expect DENY $'cat AGENTS.md\nnix run .#build-switch'
 expect DENY 'bash -c "cat apps/aarch64-darwin/build-switch"'
 expect DENY 'cat apps/aarch64-darwin/build-switch > apps/aarch64-darwin/rollback'
 expect DENY 'echo x >> apps/aarch64-darwin/build-switch'
