@@ -20,8 +20,9 @@ A deploy changes a live machine, so it runs only when the user asked for it, whi
 | Don't activate darwin config | None — build and hand to the user |
 | Don't deploy a host another branch owns | None. Resolve with its owner first |
 
-`.claude/hooks/deploy-guard.sh` denies darwin activation and the upstream starter's linux apps, and reminds an agent
-of preflight on every `nixos-rebuild switch`, `boot` or `test`.
+`.claude/hooks/deploy-guard.sh` denies darwin activation and the upstream starter's linux apps, and asks the user to
+approve every `nixos-rebuild switch`, `boot` or `test`, with the preflight reminder in the prompt. It also asks when it
+cannot read a call's command, for instance without `jq`, and the call names one of those words.
 
 ## Preflight
 

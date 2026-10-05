@@ -340,9 +340,11 @@ the worktree already in use, not off `main`.
   in `.claude/settings.json`, with `requireWorktree` on). Every other push prompts, any push from the main checkout
   included. Push only when the flow calls for it.
 - **`.claude/hooks/deploy-guard.sh`**, this repository's own hook, denies darwin activation and the upstream
-  starter's linux apps, and reminds you of preflight on every `nixos-rebuild switch`, `boot` or `test`. It matches
-  command text, so it also fires on a commit message that names one of those commands; pass such a message with
-  `git commit -F <file>`. Its verdict table is `.claude/hooks/deploy-guard-test.sh`; run it after changing the guard.
+  starter's linux apps, and asks the user to approve every `nixos-rebuild switch`, `boot` or `test`. It matches
+  command text, ignoring quotes and wrappers such as `sudo` or `bash -c`, so it also fires on a commit message that
+  names one of those commands; pass such a message with `git commit -F <file>`. It asks about any call it cannot read,
+  such as one without `jq`, that names one of them. Its verdict table is `.claude/hooks/deploy-guard-test.sh`; run it
+  after changing the guard.
 - **The ask floor** in `.claude/settings.json` prompts for any push whose text names `main` or `master`, so keep both
   words out of branch names. It is the backstop for a machine where the plugin's hooks do not run: committed
   enablement installs nothing, and without the ikeh marketplace registered and `ikeh-git@ikeh` installed
