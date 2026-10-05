@@ -1,0 +1,38 @@
+{
+  "worktree": {
+    "baseRef": "head"
+  },
+  "enabledPlugins": {
+    "ikeh-git@ikeh": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/deploy-guard.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "ask": [
+      "Bash(git push *main*)",
+      "Bash(git push *master*)",
+      "Bash(git -* push *main*)",
+      "Bash(git -* push *master*)"
+    ]
+  },
+  "pushGuard": {
+    "allowAgenticPush": true,
+    "remote": "origin",
+    "branchPrefixes": [
+      "agent"
+    ],
+    "requireWorktree": true
+  }
+}
