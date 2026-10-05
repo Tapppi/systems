@@ -84,6 +84,7 @@ in
     ../../modules/darwin/session-sync.nix
     ../../modules/darwin/herdr.nix
     ../../modules/darwin/codex.nix
+    ../../modules/darwin/agent-reaper
     ../../modules/darwin/opencode.nix
     ../../modules/darwin/pi-coding-agent.nix
     ../../modules/darwin/hammerspoon

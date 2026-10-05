@@ -11,6 +11,7 @@ Imported by `hosts/darwin-minimal/`. Changing these changes a real machine.
 ├── session-sync.nix      # launchd agent mirroring ~/.claude/ to the homelab archive
 ├── herdr.nix             # the agent multiplexer, and its generated config
 ├── codex.nix             # Codex from nixpkgs-fresh, plus its system defaults in /etc/codex/config.toml
+├── agent-reaper/         # launchd agent reaping idle codex-companion brokers and orphaned MCP servers
 ├── opencode.nix          # OpenCode from nixpkgs-fresh; its config stays with the dotfiles repo
 ├── pi-coding-agent.nix   # pi from nixpkgs-fresh
 └── hammerspoon/          # the Hammerspoon app and its config — read its README first
