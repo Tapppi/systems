@@ -10,10 +10,7 @@
     # rebuilds nvim and the Rosetta builder's guest image; agent tooling like
     # herdr ships every week or two and is worth updating far more often than
     # that. Update with `nix flake update nixpkgs-fresh`.
-    # TEMPORARY: pinned to the master commit that bumped codex to 0.159.1
-    # (GPT-6.1 Sol), which nixos-unstable had not reached. Return to
-    # "github:nixos/nixpkgs/nixos-unstable" once the channel carries codex >= 0.159.
-    nixpkgs-fresh.url = "github:nixos/nixpkgs/edf8c49b23702fdedec9db25340c69058193485a";
+    nixpkgs-fresh.url = "github:nixos/nixpkgs/nixos-unstable";
     # Must follow nixpkgs; left bare it pulls in a second one.
     home-manager = {
       url = "github:nix-community/home-manager";
