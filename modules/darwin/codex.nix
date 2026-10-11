@@ -10,15 +10,15 @@
 # this module never writes to it. Existing user keys keep winning, so on a
 # machine that already has a user file the owner deletes the overlapping keys
 # once — model, model_reasoning_effort, model_provider, model_context_window,
-# model_auto_compact_token_limit, approvals_reviewer, sandbox_mode, web_search
-# and the [features] flags — to adopt these defaults; Codex rewrites
-# model/effort/features only when they are changed in the TUI, which is the
-# behaviour wanted.
+# model_auto_compact_token_limit, approvals_reviewer, sandbox_mode,
+# web_search, the [features] flags and [agents] max_depth — to adopt these
+# defaults; Codex rewrites model/effort/features only when they are changed
+# in the TUI, which is the behaviour wanted.
 # Only owner intent goes here: model, effort, provider, window, auto-compact,
-# approvals, sandbox mode, web search and feature flags. Everything the app
-# writes for itself — project trust, TUI state, hook hashes, marketplaces,
-# plugins, node_repl trust, the desktop block, and the MCP server table with
-# its credentials — stays in the user file and out of the world-readable store.
+# approvals, sandbox mode, web search, feature flags and agent depth.
+# Everything the app writes for itself — project trust, TUI state, hook
+# hashes, marketplaces, plugins, node_repl trust, the desktop block, and the
+# MCP server table with its credentials — stays in the user file and out of the world-readable store.
 #
 # The package puts three binaries on PATH: codex, codex-code-mode-host and a
 # generically named logs_client. Nothing else provides the last one today.
@@ -48,5 +48,10 @@ in
     [features]
     hooks = true
     js_repl = false
+
+    # Matches the delegation depth the Ikeh agents are written for
+    # (CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=4 on the Claude side).
+    [agents]
+    max_depth = 4
   '';
 }
