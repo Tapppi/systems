@@ -11,11 +11,11 @@
 # machine that already has a user file the owner deletes the overlapping keys
 # once — model, model_reasoning_effort, model_provider, model_context_window,
 # model_auto_compact_token_limit, approvals_reviewer, sandbox_mode,
-# web_search, the [features] flags and [agents] max_depth — to adopt these
+# web_search, the [features] flags and the [agents] table — to adopt these
 # defaults; Codex rewrites model/effort/features only when they are changed
 # in the TUI, which is the behaviour wanted.
 # Only owner intent goes here: model, effort, provider, window, auto-compact,
-# approvals, sandbox mode, web search, feature flags and agent depth.
+# approvals, sandbox mode, web search, feature flags and the subagent cap.
 # Everything the app writes for itself — project trust, TUI state, hook
 # hashes, marketplaces, plugins, node_repl trust, the desktop block, and the
 # MCP server table with its credentials — stays in the user file and out of the world-readable store.
@@ -49,9 +49,10 @@ in
     hooks = true
     js_repl = false
 
-    # Matches the delegation depth the Ikeh agents are written for
-    # (CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=4 on the Claude side).
+    # Subagent threads one session may run at once, the root excluded. Codex
+    # has no nesting-depth limit for the models in use, so this cap on the
+    # whole agent tree is the one that bounds how wide delegation fans out.
     [agents]
-    max_depth = 4
+    max_concurrent_threads_per_session = 8
   '';
 }
