@@ -6,6 +6,10 @@
 #
 # nixpkgs-fresh is plain nixos-unstable, so the package substitutes from
 # cache.nixos.org and no extra binary cache needs trusting.
+#
+# A project's devenv may pin a devenv version range (ikeh currently accepts
+# 2.4.x), so a refresh that moves devenv past it needs that project's pin
+# bumped too.
 { pkgs, inputs, ... }:
 
 let
