@@ -48,6 +48,9 @@ in
     [features]
     hooks = true
     js_repl = false
+    # Run every model on multi-agent V2. Without it the model catalog picks
+    # V1 for older models, whose agents follow different limits.
+    multi_agent_v2 = true
 
     # Subagent threads one session may run at once, the root excluded. Codex
     # has no nesting-depth limit for the models in use, so this cap on the
