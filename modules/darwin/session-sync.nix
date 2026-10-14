@@ -1,5 +1,5 @@
 # Mirrors this Mac's AI coding-agent session transcripts to the homelab
-# archive guest (arkisto), which is the permanent record.
+# archive, which is the permanent record.
 #
 # Claude Code writes JSONL transcripts under ~/.claude/projects/<mangled-cwd>/
 # and prunes them after cleanupPeriodDays. The archive outlives that window, so
@@ -10,16 +10,13 @@
 # tool-results/ and subagents/ hold content spilled out of the transcripts that
 # a session needs to be read — or resumed — in full.
 #
-# The remote end is a forced-command rrsync in write-only mode (see
-# hosts/nixos/arkisto), so this key can add to the archive and can neither read
-# it back nor get a shell. Paths below are relative to the rrsync root.
+# The remote end uses forced-command rrsync in write-only mode, so this key
+# can add to the archive and can neither read it back nor get a shell. Paths below are relative to the rrsync root.
 { config, pkgs, lib, ... }:
 
 let
-  user = "tapani";
-  home = "/Users/${user}";
-
-  archiveHost = "arkisto";
+  home = config.local.workstation.home;
+  archiveHost = config.local.sessionSync.archiveHost;
   syncKey = "${home}/.ssh/id_archive_sync";
 
   # ~/.ssh/config sets IdentityAgent on Host *, pointing every connection at
@@ -78,7 +75,13 @@ let
   '';
 in
 {
-  launchd.user.agents.claude-session-sync = {
+  options.local.sessionSync.archiveHost = lib.mkOption {
+    type = lib.types.strMatching "[A-Za-z0-9][A-Za-z0-9.-]*";
+    default = "archive.example.invalid";
+    description = "SSH host or alias serving the write-only session archive.";
+  };
+
+  config.launchd.user.agents.claude-session-sync = {
     command = "${syncScript}";
     serviceConfig = {
       # Half-hourly. StartInterval counts from load and does not fire while the

@@ -30,8 +30,8 @@ JSON[chrome] = {
   profile = {
     info_cache = {
       ["Default"] = { name = "Your Chrome" },
-      ["Profile 1"] = { name = "acme.example", gaia_given_name = "Tapani" },
-      ["Profile 2"] = { name = "Client Co", gaia_given_name = "Tapani" },
+      ["Profile 1"] = { name = "acme.example", gaia_given_name = "Alex" },
+      ["Profile 2"] = { name = "Client Co", gaia_given_name = "Alex" },
     },
   },
 }
@@ -113,8 +113,8 @@ check(
 
 print("window matching")
 local chromeWins = {
-  mkwin(1, "Some page - Google Chrome - Tapani (acme.example)"),
-  mkwin(2, "Other - Google Chrome - Tapani (Client Co)"),
+  mkwin(1, "Some page - Google Chrome - Alex (acme.example)"),
+  mkwin(2, "Other - Google Chrome - Alex (Client Co)"),
 }
 -- An automation copy driven with its own --user-data-dir. Same bundle id, same
 -- bundle path, and its titles carry no profile suffix at all.
@@ -178,13 +178,13 @@ check(
     JSON[chrome] = {
       profile = {
         info_cache = {
-          ["Profile 1"] = { name = "acme.example", gaia_given_name = "Tapani", enterprise_label = "Acme Corp" },
-          ["Profile 2"] = { name = "Client Co", gaia_given_name = "Tapani", enterprise_label = "" },
+          ["Profile 1"] = { name = "acme.example", gaia_given_name = "Alex", enterprise_label = "Acme Corp" },
+          ["Profile 2"] = { name = "Client Co", gaia_given_name = "Alex", enterprise_label = "" },
         },
       },
     }
-    local labelled = mkwin(61, "page - Google Chrome - Tapani (Acme Corp)")
-    local unlabelled = mkwin(62, "page - Google Chrome - Tapani (Client Co)")
+    local labelled = mkwin(61, "page - Google Chrome - Alex (Acme Corp)")
+    local unlabelled = mkwin(62, "page - Google Chrome - Alex (Client Co)")
     APPS["com.google.Chrome"] = { mkapp({ labelled, unlabelled }) }
     local found = browsers.windowsFor(company)
     local other = browsers.windowsFor(client)
@@ -193,8 +193,8 @@ check(
       profile = {
         info_cache = {
           ["Default"] = { name = "Your Chrome" },
-          ["Profile 1"] = { name = "acme.example", gaia_given_name = "Tapani" },
-          ["Profile 2"] = { name = "Client Co", gaia_given_name = "Tapani" },
+          ["Profile 1"] = { name = "acme.example", gaia_given_name = "Alex" },
+          ["Profile 2"] = { name = "Client Co", gaia_given_name = "Alex" },
         },
       },
     }
@@ -276,8 +276,8 @@ check(
 check(
   "minimizing is used when another profile's window is still visible",
   (function()
-    local mine = mkwin(22, "Some page - Google Chrome - Tapani (acme.example)")
-    local theirs = mkwin(23, "Other - Google Chrome - Tapani (Client Co)")
+    local mine = mkwin(22, "Some page - Google Chrome - Alex (acme.example)")
+    local theirs = mkwin(23, "Other - Google Chrome - Alex (Client Co)")
     APPS["com.google.Chrome"] = { mkapp({ mine, theirs }) }
     FOCUSED = mine
     local hiddenBefore = RECORDED.hidden or 0
@@ -386,8 +386,8 @@ check(
     end
     NOW = 6000
 
-    local mine = mkwin(320, "Page - Google Chrome - Tapani (acme.example)")
-    local theirs = mkwin(321, "Other - Google Chrome - Tapani (Client Co)")
+    local mine = mkwin(320, "Page - Google Chrome - Alex (acme.example)")
+    local theirs = mkwin(321, "Other - Google Chrome - Alex (Client Co)")
     local chromeApp = mkapp({ mine, theirs }, { bundle = "com.google.Chrome" })
     APPS["com.google.Chrome"] = { chromeApp }
 
@@ -531,8 +531,8 @@ check(
   "a full-screen window hides even beside another visible window",
   (function()
     -- It cannot minimize, so the minimize branch would do nothing at all.
-    local full = mkwin(306, "Page - Google Chrome - Tapani (acme.example)", { fullScreen = true })
-    local theirs = mkwin(307, "Other - Google Chrome - Tapani (Client Co)")
+    local full = mkwin(306, "Page - Google Chrome - Alex (acme.example)", { fullScreen = true })
+    local theirs = mkwin(307, "Other - Google Chrome - Alex (Client Co)")
     APPS["com.google.Chrome"] = { mkapp({ theirs, full }, { bundle = "com.google.Chrome" }) }
     FOCUSED = full
     local hiddenBefore = RECORDED.hidden or 0
@@ -560,9 +560,9 @@ check(
 check(
   "a focused window of another profile is not claimed",
   (function()
-    local theirs = mkwin(309, "Other - Google Chrome - Tapani (Client Co)")
+    local theirs = mkwin(309, "Other - Google Chrome - Alex (Client Co)")
     mkapp({ theirs }, { bundle = "com.google.Chrome" })
-    local wrongBundle = mkwin(310, "x - Tapani (acme.example)")
+    local wrongBundle = mkwin(310, "x - Alex (acme.example)")
     mkapp({ wrongBundle }, { bundle = "com.example.NotChrome" })
     return browsers.owns(company, theirs) == false
       and browsers.owns(client, theirs) == true
@@ -794,8 +794,8 @@ check(
 check(
   "a browser profile never hides the app for another profile's focus",
   (function()
-    local theirs = mkwin(331, "Other - Google Chrome - Tapani (Client Co)")
-    local mine = mkwin(332, "Page - Google Chrome - Tapani (acme.example)")
+    local theirs = mkwin(331, "Other - Google Chrome - Alex (Client Co)")
+    local mine = mkwin(332, "Page - Google Chrome - Alex (acme.example)")
     local chromeApp = mkapp({ theirs, mine }, { bundle = "com.google.Chrome" })
     APPS["com.google.Chrome"] = { chromeApp }
     FRONTMOST = chromeApp

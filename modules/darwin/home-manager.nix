@@ -1,7 +1,7 @@
 { config, pkgs, lib, home-manager, inputs, ... }:
 
 let
-  user = "tapani";
+  user = "demo";
   # Define the content of your file as a derivation
   #myEmacsLauncher = pkgs.writeScript "emacs-launcher.command" ''
   #  #!/bin/sh

@@ -1,7 +1,5 @@
-# TODO: karabiner-elements, rust, go, zig, typescript
-# TODO: migrate brewfiles
 {
-  description = "Starter Configuration for MacOS and NixOS";
+  description = "Reusable NixOS, nix-darwin and Home Manager modules with buildable examples";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
@@ -39,7 +37,7 @@
       url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    # Apple T2 support for automatix, via nixosModules.apple-t2: the patched
+    # Apple T2 support for Apple T2 hardware, via nixosModules.apple-t2: the patched
     # t2linux kernel that drives the internal keyboard, trackpad and audio, and
     # a derivation that extracts Broadcom wifi firmware from an Apple recovery
     # image so the host needs no surviving macOS install.
@@ -66,84 +64,55 @@
     };
   };
 
-  outputs = { self, darwin, nix-homebrew, homebrew-bundle, homebrew-core, homebrew-cask, home-manager, nixpkgs, nixpkgs-fresh, disko, nixCats, nvim, nix-rosetta-builder, nixos-hardware } @inputs:
+  outputs = inputs@{ self, nixpkgs, darwin, home-manager, ... }:
     let
-      user = "tapani";
-      linuxSystems = [ "x86_64-linux" "aarch64-linux" ];
-      darwinSystems = [ "aarch64-darwin" ];
-      forAllSystems = f: nixpkgs.lib.genAttrs (linuxSystems ++ darwinSystems) f;
-      devShell = system: let pkgs = nixpkgs.legacyPackages.${system}; in {
-        default = with pkgs; mkShell {
-          nativeBuildInputs = with pkgs; [ bashInteractive git ];
-          shellHook = with pkgs; ''
-            export EDITOR=nvim
-          '';
+      systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
+      forAllSystems = nixpkgs.lib.genAttrs systems;
+      mkNixos = { modules, system ? "x86_64-linux", specialArgs ? {} }:
+        nixpkgs.lib.nixosSystem {
+          inherit system modules;
+          specialArgs = inputs // { inherit inputs; } // specialArgs;
         };
+      mkDarwin = { modules, system ? "aarch64-darwin", specialArgs ? {} }:
+        darwin.lib.darwinSystem {
+          inherit system;
+          specialArgs = inputs // { inherit inputs; } // specialArgs;
+          modules = [ home-manager.darwinModules.home-manager inputs.nix-rosetta-builder.darwinModules.default ] ++ modules;
+        };
+    in {
+      lib = { inherit mkNixos mkDarwin; };
+      nixosModules = {
+        intel-n150 = ./modules/nixos/intel-n150;
+        apple-t2 = ./modules/nixos/apple-t2;
+        apple-t2-hardware = ./modules/nixos/apple-t2/t2.nix;
+        headless-t2 = ./modules/nixos/apple-t2/headless.nix;
+        lxc-guest = ./modules/nixos/lxc-guest.nix;
+        installer = ./modules/nixos/installer/default.nix;
+        installer-t2 = ./modules/nixos/installer/t2.nix;
+        speech = ./modules/nixos/services/speech;
+        archive = ./modules/nixos/services/archive;
+        bench-absurd = ./modules/nixos/services/bench-absurd;
+        bench-load = ./modules/nixos/services/bench-load;
+        bench-obs = ./modules/nixos/services/bench-obs;
+        bench-temporal = ./modules/nixos/services/bench-temporal;
       };
-      # Stamp every host with the commit it was built from. Deploys run from an
-      # agent worktree branch rather than from main, so a host is the only place
-      # that records which branch actually won; scripts/deploy-preflight.sh reads
-      # this back over SSH and refuses to overwrite a host running something the
-      # deploying branch does not contain. `dirtyRev` covers uncommitted deploys,
-      # which are unreconstructable and flagged as such.
-      revision = {
-        system.configurationRevision = self.rev or self.dirtyRev or null;
+      darwinModules = {
+        workstation = ./modules/darwin/workstation.nix;
+        hammerspoon = ./modules/darwin/hammerspoon;
+        codex = ./modules/darwin/codex.nix;
+        herdr = ./modules/darwin/herdr.nix;
+        session-sync = ./modules/darwin/session-sync.nix;
+        agent-reaper = ./modules/darwin/agent-reaper;
+        opencode = ./modules/darwin/opencode.nix;
+        devenv = ./modules/darwin/devenv.nix;
+        pi-coding-agent = ./modules/darwin/pi-coding-agent.nix;
       };
-
-      mkApp = scriptName: system: {
-        type = "app";
-        program = "${(nixpkgs.legacyPackages.${system}.writeScriptBin scriptName ''
-          #!/usr/bin/env bash
-          PATH=${nixpkgs.legacyPackages.${system}.git}/bin:$PATH
-          echo "Running ${scriptName} for ${system}"
-          # Pass arguments, e.g. `nix run .#build-switch -- --dry-run`.
-          exec ${self}/apps/${system}/${scriptName} "$@"
-        '')}/bin/${scriptName}";
-      };
-      # Only apps that exist under apps/<system>/ (aarch64-linux is a symlink to
-      # x86_64-linux). The starter also declared these, kept here as a record of
-      # what it modelled — none had a script in this repo, so they could only
-      # ever fail at exec:
-      #
-      #   "install"     = mkApp "install" system;      # bare-metal NixOS installer.
-      #                     Superseded by scripts/install-dogmatix-emmc.sh; the
-      #                     steady-state entrypoints are build-switch/rollback.
-      #   "copy-keys"   = mkApp "copy-keys" system;    # ~/.ssh/id_ed25519{,_agenix}
-      #   "create-keys" = mkApp "create-keys" system;  #   from/to a USB stick, for
-      #   "check-keys"  = mkApp "check-keys" system;   #   the starter's agenix flow.
-      #                     Secrets are going to 1Password now and a homelab manager
-      #                     (vaultwarden?) later — see ADR-003 — so files-on-disk key
-      #                     scripts are not the model we want; what to keep is how
-      #                     they were wired, not the scripts.
-      #
-      #   "apply"       = mkApp "apply" system;        # token substitution. The
-      #                     NixOS %HOST%/%DISK%/%INTERFACE% placeholders it fills are
-      #                     still live, but it seds every file under the cwd including
-      #                     .git — see apps/aarch64-darwin/apply. ADR-002 retires the
-      #                     starter tree rather than fixing it.
-      # NOTE build-switch is itself still the starter's: it resolves the target
-      # from `uname -m` and switches to nixosConfigurations.<arch>, the untested
-      # placeholder, rather than to a hostname-keyed host like dogmatix. It is
-      # also non-executable, so it cannot currently run. Fix the target before
-      # arming it — the placeholder's `keys` list is now empty, so activating it
-      # would leave a host with no authorized SSH keys. Real deploys are
-      # push-based (HLB-9) via remote nixos-rebuild.
-      mkLinuxApps = system: {
-        "build-switch" = mkApp "build-switch" system;
-      };
-      # Only apps used on darwin.
-      mkDarwinApps = system: {
-        "build" = mkApp "build" system;
-        "build-switch" = mkApp "build-switch" system;
-        "rollback" = mkApp "rollback" system;
-      };
-    in
-    {
-      devShells = forAllSystems devShell;
-
-      # The hand-edited Hammerspoon Lua is symlinked out of the store, so no
-      # build can catch a syntax error in it. Parsed here with the same Lua the
-      # app embeds, and held to the repo's StyLua config.
+      homeManagerModules.workstationFiles = ./modules/home-manager/workstation-files.nix;
+      devShells = forAllSystems (system: {
+        default = nixpkgs.legacyPackages.${system}.mkShell {
+          nativeBuildInputs = with nixpkgs.legacyPackages.${system}; [ bashInteractive git ];
+        };
+      });
       checks = forAllSystems (system:
         let pkgs = nixpkgs.legacyPackages.${system};
         in {
@@ -199,140 +168,15 @@
             touch "$out"
           '';
         });
-      apps = nixpkgs.lib.genAttrs linuxSystems mkLinuxApps // nixpkgs.lib.genAttrs darwinSystems mkDarwinApps;
 
-      # Keyed by hostname only. The upstream starter's per-architecture entry is
-      # not instantiated: it would override configuration that tapppi/macos-setup
-      # still manages. See ./hosts/darwin/default.nix for that example config and
-      # the flake wiring it used.
-      darwinConfigurations = {
-        # Minimal, self-contained config for this Mac (asterix): nvim, neovide
-        # and nix-rosetta-builder plus the Determinate accommodations.
-        asterix = darwin.lib.darwinSystem {
-          system = "aarch64-darwin";
-          specialArgs = inputs // { inherit inputs; };
-          modules = [
-            inputs.nix-rosetta-builder.darwinModules.default
-            home-manager.darwinModules.home-manager
-            ./hosts/darwin-minimal
-            revision
-          ];
-        };
+      nixosConfigurations = {
+        nixos-intel-n150 = mkNixos { modules = [ self.nixosModules.intel-n150 ./examples/nixos-intel-n150.nix ]; };
+        nixos-on-t2 = mkNixos { modules = [ self.nixosModules.apple-t2 inputs.disko.nixosModules.disko ./examples/nixos-on-t2.nix ]; };
       };
-
-      nixosConfigurations = nixpkgs.lib.genAttrs linuxSystems (system: nixpkgs.lib.nixosSystem {
-        inherit system;
-        specialArgs = inputs // { inherit inputs; };
-        modules = [
-          disko.nixosModules.disko
-          home-manager.nixosModules.home-manager {
-            home-manager = {
-              useGlobalPkgs = true;
-              useUserPackages = true;
-              extraSpecialArgs = { inherit inputs; };
-              users.${user} = import ./modules/nixos/home-manager.nix;
-            };
-          }
-          ./hosts/nixos
-        ];
-     }) // {
-        # Real machines, keyed by hostname. The per-architecture entries above
-        # are the upstream starter's untested desktop placeholder.
-        dogmatix = nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          specialArgs = inputs // { inherit inputs; };
-          modules = [ ./hosts/nixos/dogmatix revision ];
-        };
-
-        # automatix — the 2018 MacBook Pro, an Apple T2 machine, run headless
-        # as the fleet's x86_64-linux builder and media host. The only host
-        # here that uses disko: nixos-anywhere requires it, and ADR-001 makes
-        # nixos-anywhere the onboarding path. See hosts/nixos/automatix.
-        automatix = nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          specialArgs = inputs // { inherit inputs; };
-          modules = [
-            # Supplies system.build.diskoScript, which nixos-anywhere runs to
-            # partition, and system.build.installTest, which is what
-            # `nixos-anywhere --vm-test` builds.
-            disko.nixosModules.disko
-            ./hosts/nixos/automatix
-            revision
-          ];
-        };
-
-        # The speech guest: Kokoro-82M behind the OpenAI /v1/audio/speech
-        # contract for the vault's aloud-tts plugin, as a digest-pinned OCI
-        # image under podman. Same imperative lifecycle as the other guests,
-        # plus the podman-guest Incus profile — see hosts/nixos/tts.
-        tts = nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          specialArgs = inputs // { inherit inputs; };
-          modules = [ ./hosts/nixos/tts revision ];
-        };
-
-        # The archive guest: agent session transcripts mirrored off the Macs
-        # and host data evacuated from tmopro18, on an Incus custom storage
-        # volume attached at /data. Same imperative lifecycle as the bench
-        # guests — see modules/nixos/lxc-guest.nix.
-        arkisto = nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          specialArgs = inputs // { inherit inputs; };
-          modules = [ ./hosts/nixos/arkisto revision ];
-        };
-
-        # Workflow-engine bench guests: NixOS LXC system containers under
-        # Incus on dogmatix (tieto goldmill/wiki/reviews/bench/). Lifecycle
-        # is imperative (`incus launch images:nixos/unstable <name> -p
-        # default -p bench-guest`); contents deploy via nixos-rebuild — see
-        # modules/nixos/bench/guest-base.nix.
-        bench-absurd = nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          specialArgs = inputs // { inherit inputs; };
-          modules = [ ./hosts/nixos/bench-absurd revision ];
-        };
-        bench-load = nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          specialArgs = inputs // { inherit inputs; };
-          modules = [ ./hosts/nixos/bench-load revision ];
-        };
-        bench-obs = nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          specialArgs = inputs // { inherit inputs; };
-          modules = [ ./hosts/nixos/bench-obs revision ];
-        };
-        bench-temporal = nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          specialArgs = inputs // { inherit inputs; };
-          modules = [ ./hosts/nixos/bench-temporal revision ];
-        };
-
-        # SSH-enabled installer image for headless host onboarding: boots with
-        # the Asterix Identity key authorized and sshd up, reachable at
-        # konehuone-installer.local. Build the ISO via
-        # packages.x86_64-linux.konehuone-installer-iso below.
-        konehuone-installer = nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          specialArgs = inputs // { inherit inputs; };
-          modules = [ ./modules/nixos/installer ];
-        };
-
-        # The same installer plus the patched t2linux kernel, for Apple T2
-        # Macs whose internal keyboard a stock kernel cannot see. Separate
-        # artifact so that onboarding any other host does not depend on a
-        # third-party binary cache — see modules/nixos/installer/t2.nix.
-        konehuone-installer-t2 = nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          specialArgs = inputs // { inherit inputs; };
-          modules = [ ./modules/nixos/installer/t2.nix ];
-        };
+      darwinConfigurations.apple-silicon-host = mkDarwin {
+        modules = [ self.darwinModules.workstation ./examples/apple-silicon-host.nix ];
       };
-
-      # Buildable artifacts. The installer ISO needs an x86_64-linux + kvm
-      # builder (the Mac's rosetta builder, or dogmatix once up).
-      packages.x86_64-linux.konehuone-installer-iso =
-        self.nixosConfigurations.konehuone-installer.config.system.build.isoImage;
-      packages.x86_64-linux.konehuone-installer-t2-iso =
-        self.nixosConfigurations.konehuone-installer-t2.config.system.build.isoImage;
-  };
+      # Generic builders are selected through exported modules. Fleet ISO names
+      # and authorized access keys belong to the composing repository.
+    };
 }

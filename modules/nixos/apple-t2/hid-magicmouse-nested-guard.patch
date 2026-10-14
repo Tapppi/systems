@@ -1,0 +1,62 @@
+Subject: [PATCH] HID: magicmouse: preserve the USB nested-report guard
+SPDX-License-Identifier: GPL-2.0-or-later
+
+Backport the USB helper separation from the T2 stable trackpad repair:
+https://github.com/t2linux/linux-t2-patches/commit/05f8dce5b55ee511c84378199e6cee37df79b4ae
+
+Keep the recursion guard in the USB parser, pass true for both nested
+reports, and preserve the four-argument transport callback interface.
+The affected functions match that upstream repair without importing its
+other trackpad changes.
+
+--- a/drivers/hid/hid-magicmouse.c
++++ b/drivers/hid/hid-magicmouse.c
+@@ -613,16 +613,8 @@
+ 	}
+ }
+ 
+-static int __magicmouse_raw_event(struct hid_device *hdev,
++static int __magicmouse_raw_event_usb(struct hid_device *hdev,
+ 		struct hid_report *report, u8 *data, int size, bool nested)
+-{
+-	struct magicmouse_sc *msc = hid_get_drvdata(hdev);
+-
+-	return msc->input_ops.raw_event(hdev, report, data, size);
+-}
+-
+-static int magicmouse_raw_event_usb(struct hid_device *hdev,
+-		struct hid_report *report, u8 *data, int size)
+ {
+ 	struct magicmouse_sc *msc = hid_get_drvdata(hdev);
+ 	struct input_dev *input = msc->input;
+@@ -753,8 +745,8 @@
+ 			return 0;
+ 		}
+ 
+-		__magicmouse_raw_event(hdev, report, data + 2, data[1], true);
+-		__magicmouse_raw_event(hdev, report, data + 2 + data[1],
++		__magicmouse_raw_event_usb(hdev, report, data + 2, data[1], true);
++		__magicmouse_raw_event_usb(hdev, report, data + 2 + data[1],
+ 			size - 2 - data[1], true);
+ 		return 0;
+ 	default:
+@@ -781,10 +773,18 @@
+ 	return 1;
+ }
+ 
++static int magicmouse_raw_event_usb(struct hid_device *hdev,
++		struct hid_report *report, u8 *data, int size)
++{
++	return __magicmouse_raw_event_usb(hdev, report, data, size, false);
++}
++
+ static int magicmouse_raw_event(struct hid_device *hdev,
+ 		struct hid_report *report, u8 *data, int size)
+ {
+-	return __magicmouse_raw_event(hdev, report, data, size, false);
++	struct magicmouse_sc *msc = hid_get_drvdata(hdev);
++
++	return msc->input_ops.raw_event(hdev, report, data, size);
+ }
+ 
+ /**

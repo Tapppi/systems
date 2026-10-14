@@ -1,87 +1,71 @@
-# tapppi/nix-config
+# systems
 
-My system configuration for macOS and nixOS built with Nix.
-The goal is to have a single reproducible configuration source for my working
-environments.
+Public NixOS, nix-darwin and Home Manager modules, with buildable hardware examples.
+Actual machine identities, storage bindings, access grants and service placement belong in a composing flake.
+This repository evaluates without private inputs.
 
-Nix is a powerful package manager for Linux and Unix systems that ensures
-reproducible, declarative, and reliable software management.
+## Interfaces
 
-## Status
+`nixosModules` exports the Intel N150 and headless Apple T2 server profiles, independent T2 hardware and
+headless policy, an Incus guest base, generic/T2 installers, and speech, archive and benchmark services.
+`darwinModules` exports the workstation and its individual tools. `homeManagerModules.workstationFiles`
+provides the narrow Darwin file policy; the composition owns Home Manager state version and identity.
 
-Currently configuring the macOS configuration based on
-[my old macos-setup repo](https://github.com/tapppi/macos-setup).
-The nixOS config is wholly untested and simply there as a placeholder.
+`lib.mkNixos { modules = [ ... ]; }` and `lib.mkDarwin { modules = [ ... ]; }` use this flake's pins and
+supply its `inputs` to modules. Both accept `system` and `specialArgs`; a consumer can pass
+`specialArgs.inputs = systems.inputs // inputs` to add its composing flake's inputs. The Darwin helper
+loads Home Manager and nix-rosetta-builder. Modules can also be imported with the upstream constructors.
 
-## Usage
+The main `nixpkgs` pin serves the operating systems, editor and Linux builder. `nixpkgs-fresh` is updated
+separately for fast-moving tools with `nix flake update nixpkgs-fresh`. Keep each consumer's corresponding
+input following the same track. The standalone editor is documented in [flakes/nvim](flakes/nvim/README.md).
 
-`darwinConfigurations` are keyed by **hostname**, and the apps in `apps/`
-resolve the right one automatically:
+## Examples and checks
 
 ```sh
-nix run .#build         # build only, activates nothing
-nix run .#build-switch  # build and activate (prompts for sudo)
-nix run .#rollback      # list generations, pick one, activate it
+nix flake check
+nix build .#nixosConfigurations.nixos-intel-n150.config.system.build.toplevel
+nix build .#nixosConfigurations.nixos-on-t2.config.system.build.toplevel
+nix build .#darwinConfigurations.apple-silicon-host.system
 ```
 
-`build-switch` is *the* entrypoint. What it does underneath — `nix build`
-followed by `darwin-rebuild switch --flake .#<hostname>`, with activation as
-root — is an implementation detail. Set `DARWIN_HOST` to target a machine other
-than the one you are sitting at.
+These examples use synthetic identities and disk assumptions. They are build/evaluation examples, not
+installation commands. The T2 disk path deliberately names no real device; replace it only in a reviewed
+composition. The Darwin example's Hammerspoon Lua path must point at a real checkout before activation.
+Linux outputs require a compatible Linux builder. Firmware/image derivations may require the builder
+to advertise the `kvm` system feature; QEMU can fall back to slower software emulation when KVM
+acceleration is unavailable.
 
-Note this is system configuration, not package installation: it replaces
-`/run/current-system` with a whole new generation built from this repo. That is
-different from `nix profile install`, which imperatively adds a single package
-to `~/.nix-profile` and is not tracked here. Use the flake for anything that
-should be reproducible; `nix profile install` (or better, `nix shell nixpkgs#x`)
-only for throwaway one-offs.
+For remote-build diagnosis, capture the full live log with `-L`. Add `--keep-failed` while
+investigating to retain the failed build workspace on the builder:
 
-### asterix
-
-The Apple Silicon Mac, mid-migration from `macos-setup`. `hosts/darwin-minimal/`
-is deliberately small while that migration is in progress — it manages the
-nix-rosetta-builder Linux builder, neovim (built from `flakes/nvim`), neovide
-wrapped to launch that exact neovim, and the Determinate Nix accommodations.
-Everything else on that machine is still owned by `macos-setup`.
-
-Because Determinate Nix owns the daemon, `nix.enable = false` and most `nix.*`
-options are inert; `/etc/nix/machines`, GC and the custom nix.conf are
-reinstated explicitly in `hosts/darwin-minimal/default.nix`.
-
-`hosts/darwin/` and `modules/darwin/` are the full-featured upstream starter,
-kept as the worked reference for the macos-setup migration. They are not
-instantiated in `flake.nix`, so there is no buildable configuration for them.
-
-## Layout
-
-```
-.
-├── apps         # Nix commands used to bootstrap and build configuration
-├── hosts        # Host-specific configuration
-├── modules      # macOS and nix-darwin, NixOS, and shared configuration and modules
-├── overlays     # Drop an overlay file in this dir, and it runs. So far, mainly patches.
-├── templates    # Starter versions of this configuration
+```sh
+nix build -L --keep-failed --no-link \
+  .#nixosConfigurations.nixos-on-t2.config.system.build.toplevel \
+  > nixos-on-t2-build.log 2>&1
 ```
 
-## Configuration references
+Keep that captured log: a later `nix log` request over `ssh-ng` may not retrieve the complete
+remote build log.
 
-This is a listing of the location's of the most important configurations,
-referencing the template used where applicable.
+Each service module declares its configurable instance values under `services.systems-<name>`.
+Authorized public keys and fleet topology are supplied by the consumer. Installer modules expose
+`config.system.build.isoImage`; the consumer supplies authorized keys, hostname, hostId and image labels.
+The N150 profile supports the standard NixOS image builders through `config.system.build.images`.
 
-- Template for the overall nix config is from the awesome
-  [dustinlyons config](https://github.com/dustinlyons/nixos-config/tree/main).
-- [neovim module](./modules/nvim) is built with [nixCats](https://nixcats.org/)
-  and the configs are inspired by:
-  - [nixCats templates](https://nixcats.org/nixCats_templates.html), especially
-    the amazing [example template](https://github.com/BirdeeHub/nixCats-nvim/tree/main/templates/example)
-    which was used as a base for the lze, paq+mason fallback etc.
-  - [ThePrimeagen's config](https://github.com/ThePrimeagen/init.lua) and the 0
-    to LSP video for inspiration of what are basic necessities
-  - Too many different dotfiles repos and plugin docs to list here, the
-    community is vast and incredible..
+Public cache publication must select only outputs evaluated from this public flake. Do not publish
+closures evaluated from a private fleet flake: private source and generated configuration can enter the
+store even when plaintext credentials are kept at runtime paths.
 
-## Future ideas
+## Local development
 
-- Remote terminal config, i.e. a simpler configuration with minimal
-  dependencies, installable on a remote system. Provide most important terminal 
-  configurations and programs without system configuration.
+From the composing checkout, use the local library while keeping its release lock unchanged:
+
+```sh
+nix build .#nixosConfigurations.example.config.system.build.toplevel \
+  --override-input systems path:../systems --no-write-lock-file
+```
+
+Use the actual worktree path when checkouts are nested. Publish a reviewed immutable library revision
+before updating the consumer's lock. A local path override is a development input, not a release.
+See [deployment ownership](docs/deploys.md) and [Darwin modules](modules/darwin/README.md).

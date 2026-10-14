@@ -1,98 +1,13 @@
-# Deploying
+# Deployment ownership
 
-Deploying is **independent of landing**. A NixOS host deploys from whatever branch you are on; nothing has to reach
-`main` first. That is deliberate — it is what lets bring-up and iteration happen on a branch — and it is exactly why
-the preflight check below exists.
+This public repository supplies modules and buildable examples. A composing repository owns actual host
+names, access policy, disk identifiers, deployment provenance, activation records and operational wrappers.
+Build the public examples with the commands in [README](../README.md); building activates nothing.
 
-A deploy changes a live machine, so it runs only when the user asked for it, whichever flow the work is in.
+A private consumer pins a reachable immutable systems commit, follows its main and fresh-tool input tracks,
+and imports public modules into native host definitions. Its deployment procedure must verify a clean,
+recoverable candidate and the target's current provenance before activation. Moving an existing host across
+repository histories requires an explicit per-host handover; a foreign revision is not ordinary ancestry.
 
-| Target | Command | Who runs it |
-| --- | --- | --- |
-| NixOS host | `nix run nixpkgs#nixos-rebuild -- switch --flake .#<host> --target-host root@<host>` | An agent, when asked, after preflight — it SSHes as root and needs no local sudo |
-| asterix (darwin) | `nix run .#build-switch` | **The user.** It needs interactive sudo; build and hand over |
-
-## Guardrails
-
-| Rule | Exception |
-| --- | --- |
-| Preflight before every deploy | None |
-| Don't deploy past a preflight refusal | Only `PREFLIGHT_ASSUME_UNKNOWN=1`, below, and only for the stated case |
-| Don't activate darwin config | None — build and hand to the user |
-| Don't deploy a host another branch owns | None. Resolve with its owner first |
-
-`.claude/hooks/deploy-guard.sh` denies darwin activation and the upstream starter's linux apps and `apply` script, and
-asks the user to approve every `nixos-rebuild switch`, `boot` or `test`, with the preflight reminder in the prompt. It
-matches those words anywhere in a command, whatever wraps or quotes them, and lets through only single-line calls made of
-read-only programs such as `cat` and `rg`. It also asks when it cannot read a call's command, for instance without
-`jq`, and the call carries one of those words.
-
-## Preflight
-
-```bash
-scripts/deploy-preflight.sh <host>
-```
-
-Two branches can deploy to the same host and silently overwrite each other, and a stale branch can silently revert a
-host below `main`. Preflight reads the target's `system.configurationRevision` over SSH — `flake.nix` stamps every
-host with the commit it was built from — and compares it to the deploying branch:
-
-| Target revision | Verdict |
-| --- | --- |
-| Ancestor of `HEAD` | **OK** — deploy |
-| Ancestor of `main` only | **Rebase** onto `main`, then retry |
-| Anything else | **Blocked** — another branch owns this host |
-| Unknown or absent | **Blocked** — provenance unverifiable |
-
-**"Another branch owns this host" is not a lock to break.** It means someone else's work is running there. Find out
-whose before doing anything:
-
-```bash
-git log --oneline -3 <rev>
-git branch -a --contains <rev>
-```
-
-### The one override
-
-A host whose running system does not set `system.configurationRevision` reports nothing, and cannot report anything
-until it is deployed once from a config that sets it. That first deploy is the only thing the override is for:
-
-```bash
-PREFLIGHT_ASSUME_UNKNOWN=1 scripts/deploy-preflight.sh <host>
-```
-
-Confirm by hand that nothing running on the host matters first. It proceeds blind — that is the whole point, and why
-it is an environment variable rather than a flag.
-
-## Running the deploy
-
-```bash
-nix run nixpkgs#nixos-rebuild -- switch --flake .#<host> --target-host root@<host>
-```
-
-Build first if you want the failure separated from the activation:
-
-```bash
-nix build .#nixosConfigurations.<host>.config.system.build.toplevel
-```
-
-### Untracked files are invisible to nix
-
-Flake evaluation reads the git tree, so a **new** file that is not staged is a hard error, not a silent skip:
-
-```text
-error: Path 'modules/nixos/<host>/new.nix' in the repository … is not tracked by Git.
-```
-
-`git add` it. This bites every time a module is split into a new file, and it is the most common worktree deploy
-failure.
-
-Uncommitted *modifications* to tracked files do apply — nix warns "Git tree is dirty" and proceeds. A dirty deploy
-stamps the host with `<rev>-dirty`, which nobody can reconstruct later; preflight warns about this. Prefer committing
-first.
-
-## Why this is a guard and not a design
-
-Preflight serialises hosts by rejection: it stops collisions but never says what a host is *supposed* to be running.
-A dedicated deploy branch that all deploys are driven from, and that in-flight branches merge into, would replace
-rejection with convergence — and it has to live on the remote to be worth anything, which opens the question of
-deploying centrally from forge CI. That design is an open item on HLB-9 in the vault.
+Keep working recovery media and prior repository revisions until owner-led activation and rollback checks
+pass. Public examples carry no real SSH access grants and must not be used to overwrite a fleet host.

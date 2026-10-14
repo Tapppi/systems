@@ -16,12 +16,13 @@ set -euo pipefail
 . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh 2>/dev/null || true
 
 WORKDIR="$HOME/.local/share/linux-builder"
-FLAKE="/Users/tapani/project/github/tapppi/systems"
+FLAKE="${FLAKE:?Set FLAKE to the composing checkout}"
 KEYS="$WORKDIR/keys"
 export KEYS
 
 # The image the whole exercise exists to produce.
-TARGET='.#darwinConfigurations.aarch64-darwin.config.system.build.toplevel'
+DARWIN_HOST="${DARWIN_HOST:?Set DARWIN_HOST to the composing flake host}"
+TARGET=".#darwinConfigurations.${DARWIN_HOST}.system"
 
 cleanup() {
   if [[ -n "${VM_PID:-}" ]] && kill -0 "$VM_PID" 2>/dev/null; then

@@ -14,8 +14,7 @@
 { config, pkgs, lib, inputs, ... }:
 
 let
-  user = "tapani";
-  home = "/Users/${user}";
+  inherit (config.local.workstation) user home;
 
   herdr = inputs.nixpkgs-fresh.legacyPackages.${pkgs.stdenv.hostPlatform.system}.herdr;
 
@@ -26,7 +25,7 @@ let
     runtimeInputs = [ herdr ];
     text = ''
       # herdr-win              attach this tmux session's herdr session locally
-      # herdr-win tmopro18     attach it on tmopro18, over SSH
+      # herdr-win build-host   attach it on build-host, over SSH
       #
       # --session both creates and attaches, so there is nothing to provision
       # before the first run. --remote keeps the client local and only the

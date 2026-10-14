@@ -1,5 +1,6 @@
 # rsync 3.5.1 fixes the 3.5.0 path-handling regressions, including rrsync's
-# restricted-root handling. Remove once the main nixpkgs pin includes it.
+# restricted-root handling. Pins at 3.5.1 or newer use their upstream package.
+# Keep this version-gated substitution as a reusable cache-preserving example.
 final: prev: {
   rsync =
     if prev.lib.versionOlder prev.rsync.version "3.5.1" then
@@ -19,4 +20,15 @@ final: prev: {
       })
     else
       prev.rsync;
+} // prev.lib.optionalAttrs prev.stdenv.hostPlatform.isLinux {
+  # Keep fixed rsync for system scripts and image construction. The kernel's
+  # build-time copy tool uses upstream rsync to preserve kernel/module caches.
+  linuxPackagesFor = kernel: prev.linuxPackagesFor (
+    kernel.overrideAttrs (attrs: {
+      nativeBuildInputs = map
+        (dependency: if dependency == final.rsync then prev.rsync else dependency)
+        attrs.nativeBuildInputs;
+    })
+  );
+  linuxPackages = final.linuxPackagesFor prev.linuxPackages.kernel;
 }
