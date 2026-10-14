@@ -1,6 +1,7 @@
-# T2 networkd policy matches only real USB Ethernet drivers.
-# Never run blanket DHCP on the internal apple-bce bridge: its TX watchdog path can lock the kernel.
-# mDNS supplies discovery before operator-managed Tailscale enrollment.
+# Match USB Ethernet drivers instead of blanket DHCP: the internal apple-bce
+# bridge is not a LAN NIC, and its transmit/watchdog path has caused T2 lockups.
+# Driver matches also tolerate replacement dongles without a host-specific MAC.
+# See README.md; Tailscale still requires a working physical network path.
 { config, ... }:
 
 {

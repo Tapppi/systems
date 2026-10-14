@@ -116,6 +116,9 @@
       checks = forAllSystems (system:
         let pkgs = nixpkgs.legacyPackages.${system};
         in {
+          bench-observability = import ./modules/nixos/services/bench-obs/tests/check.nix {
+            inherit nixpkgs pkgs;
+          };
           hammerspoon-lua =
             let
               # The stub the module generates, built with test values so the

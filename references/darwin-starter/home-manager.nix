@@ -7,7 +7,7 @@ let
   #  #!/bin/sh
   #  emacsclient -c -n &
   #'';
-  sharedFiles = import ../shared/files.nix { inherit config pkgs; };
+  sharedFiles = import ../../modules/shared/files.nix { inherit config pkgs; };
   additionalFiles = import ./files.nix { inherit user config pkgs; };
 in
 {
@@ -50,7 +50,7 @@ in
     extraSpecialArgs = { inherit inputs; };
     users.${user} = { pkgs, config, lib, ... }:{
       imports = [
-        ../shared/home-manager.nix
+        ../../modules/shared/home-manager.nix
       ];
 
       home = {
@@ -69,7 +69,7 @@ in
         stateVersion = "25.05";
       };
 
-      programs = {} // import ../shared/programs.nix { inherit config pkgs lib; };
+      programs = {} // import ../../modules/shared/programs.nix { inherit config pkgs lib; };
     };
   };
 

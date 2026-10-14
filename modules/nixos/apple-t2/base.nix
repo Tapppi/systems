@@ -1,6 +1,5 @@
-# T2 server boot, compressed swap and build-host maintenance policy.
-# EFI variable writes must stay disabled: systemd-boot writes the removable fallback path without NVRAM.
-# zram absorbs cold memory ahead of the disk swap declared by the composition.
+# Boot and memory policy for the headless T2 profile.
+# Keep boot.kernelPackages owned by t2.nix; see README.md for composition constraints.
 {
   config,
   lib,
@@ -11,9 +10,12 @@
 {
   boot.loader.systemd-boot = {
     enable = true;
+    # Size the ESP with this limit: each retained generation copies its kernel/initrd there.
     configurationLimit = 10;
   };
 
+  # Avoid T2 EFI-variable writes. systemd-boot still installs EFI/BOOT/BOOTX64.EFI;
+  # boot discovery must work through that fallback, without a saved NVRAM entry.
   boot.loader.efi.canTouchEfiVariables = false;
   boot.loader.efi.efiSysMountPoint = "/boot";
 
@@ -42,6 +44,9 @@
     fileSystems = [ "/" ];
   };
 
+  # zram defaults to priority 5, above the composition's unprioritized disk swap.
+  # Keep that ordering: swappiness 180 favors cheap compressed-RAM reclaim,
+  # while disk swap is the overflow tier for memory-heavy builds.
   zramSwap = {
     enable = true;
     memoryPercent = 50;

@@ -1,5 +1,7 @@
-# Node, ZFS pool and Incus trust metrics.
-# The firewall exposes these only through trusted interfaces. Poller failures preserve explicit error signals.
+# Listen on all addresses so scrapes tolerate overlay/bridge address changes.
+# With networking.nix and incus.nix, only tailscale0/incusbr0 are trusted and
+# no LAN rule opens 9100 (exporter.openFirewall defaults false). Consumers
+# changing that firewall composition must preserve the intended scrape boundary.
 { config, pkgs, ... }:
 
 {
@@ -9,20 +11,30 @@
     port = 9100;
     enabledCollectors = [
       "systemd" # unit states: incus, tailscaled, zfs services
-      "zfs" # ARC hit rate and sizing against the 4 GiB arc_max cap
+      "zfs" # ARC counters; the composition owns any memory cap
       "processes" # host-wide process/thread counts
       "textfile" # host-side gauges published from timers
     ];
     extraFlags = [
       "--collector.textfile.directory=/var/lib/node-exporter-textfile"
+      # Guest dataset mounts would add host filesystem series for Incus storage.
+      # Pool-level capacity is sampled below instead of treating each as a disk.
       "--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/incus/storage-pools)($|/)"
+      # NRestarts exposes automatic restarts even when the service is active
+      # again before the next scrape; unit state alone misses that failure.
       "--collector.systemd.enable-restarts-metrics"
     ];
   };
   systemd.tmpfiles.rules = [ "d /var/lib/node-exporter-textfile 0755 root root -" ];
 
+  # Supplement the exporter's kernel ZFS stats with CLI capacity, vdev errors
+  # and scrub times. Capture command status before parsing; the shared footer
+  # atomically publishes failure/last-success signals even on a failed poll.
+  # Consumers must use those signals before trusting partial or absent gauges.
   systemd.services.zpool-metrics = {
     serviceConfig.Type = "oneshot";
+    # Follow the host's selected ZFS userspace, whose version NixOS checks
+    # against the kernel module, rather than an unrelated pkgs.zfs default.
     path = [ config.boot.zfs.package pkgs.jq pkgs.coreutils ];
     script = ''
       set -u
@@ -67,6 +79,11 @@
     };
   };
 
+  # Expose trust-certificate expiry before authenticated metrics scrapes fail.
+  # Keep this daily poll independent of the minute-scale ZFS poll: an Incus
+  # failure must not invalidate pool metrics, nor a ZFS failure certificate data.
+  # The pinned CLI defaults to CSV columns n,t,d,f,e; the parser below depends
+  # on that order and expects simple comma-free fields. Recheck on Incus updates.
   systemd.services.incus-trust-metrics = {
     serviceConfig.Type = "oneshot";
     path = [ config.virtualisation.incus.package pkgs.coreutils ];

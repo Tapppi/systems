@@ -1,5 +1,7 @@
-# The pinned kernel already has USB reset-resume and nested-report guards.
-# These T2 input-driver adaptations preserve both while adding SPI support.
+# Adapt the T2 input patches to the pinned stable kernel's reset-resume and
+# nested-report guards. Replace only 4001 in place, then append the USB parser
+# repair after the upstream patch list; reordering can undo those protections.
+# Both installer and host import this overlay. Keep their patch inputs identical.
 # https://github.com/t2linux/linux-t2-patches/commit/bd611d0d819cb811eace54b16cb79af1f674dca6
 { ... }:
 {

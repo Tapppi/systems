@@ -22,12 +22,36 @@ let
 
   soakEngines = cfg.soakEngines;
 
-  alertRules = import cfg.alertRules {
+  # Count the source map directly: reading a linkFarm at evaluation time would
+  # require import-from-derivation. An explicit directory keeps its old contract.
+  dashboardCount =
+    if cfg.dashboards != null then
+      lib.length (lib.attrNames (builtins.readDir cfg.dashboards))
+    else
+      lib.length (lib.attrNames cfg.dashboardFiles);
+  dashboardDirectory =
+    if cfg.dashboards != null then
+      cfg.dashboards
+    else
+      pkgs.linkFarm "bench-dashboards" (
+        lib.mapAttrsToList (name: path: { inherit name path; }) cfg.dashboardFiles
+      );
+  baseAlertRules = import cfg.alertRules {
     inherit lib soakEngines;
     jobs = [ "node" ] ++ otherJobs;
     nodeTargetCount = lib.length (nodeTargets.host ++ nodeTargets.guest);
-    dashboardCount = lib.length (lib.attrNames (builtins.readDir cfg.dashboards));
+    inherit dashboardCount;
   };
+  unknownAlertGroups = lib.subtractLists (lib.attrNames baseAlertRules) (
+    lib.attrNames cfg.extraAlertRules
+  );
+  alertRules = lib.mapAttrs (
+    name: group:
+    group
+    // {
+      rules = group.rules ++ (cfg.extraAlertRules.${name} or [ ]);
+    }
+  ) baseAlertRules;
 in
 {
   imports = [ ../../lxc-guest.nix ];
@@ -72,11 +96,44 @@ in
     };
     alertRules = lib.mkOption {
       type = lib.types.path;
-      description = "Private alertRules source path.";
+      default = ./alert-rules.nix;
+      description = "Rule generator path; receives lib, jobs, nodeTargetCount, dashboardCount and soakEngines.";
+    };
+    extraAlertRules = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.listOf (
+          lib.types.submodule {
+            options = {
+              alert = lib.mkOption { type = lib.types.str; };
+              expr = lib.mkOption { type = lib.types.str; };
+              for = lib.mkOption {
+                type = lib.types.str;
+                default = "0m";
+              };
+              labels = lib.mkOption {
+                type = lib.types.attrsOf lib.types.str;
+                default = { };
+              };
+              annotations = lib.mkOption {
+                type = lib.types.attrsOf lib.types.str;
+                default = { };
+              };
+            };
+          }
+        )
+      );
+      default = { };
+      description = "Additional alert rules keyed by an existing generator group (engines, fleet, host, postgres, signals or soak for the default generator).";
+    };
+    dashboardFiles = lib.mkOption {
+      type = lib.types.attrsOf lib.types.path;
+      default = { };
+      description = "Dashboard JSON source paths keyed by filename; merged with the public Incus and Postgres dashboards.";
     };
     dashboards = lib.mkOption {
-      type = lib.types.path;
-      description = "Private dashboards source path.";
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      description = "Explicit dashboard directory override. When set, replaces dashboardFiles provisioning and supplies the dashboard count.";
     };
     environmentFile = lib.mkOption {
       type = lib.types.str;
@@ -86,6 +143,22 @@ in
   };
 
   config = {
+    assertions = [
+      {
+        assertion = unknownAlertGroups == [ ];
+        message = "systems-bench-obs.extraAlertRules contains unknown groups: ${lib.concatStringsSep ", " unknownAlertGroups}";
+      }
+      {
+        assertion =
+          cfg.dashboards != null
+          || lib.all (name: builtins.match "[^/]+\\.json" name != null) (lib.attrNames cfg.dashboardFiles);
+        message = "systems-bench-obs.dashboardFiles keys must be JSON filenames without directory components";
+      }
+    ];
+    services.systems-bench-obs.dashboardFiles = {
+      "bench-incus.json" = lib.mkDefault ./dashboards/bench-incus.json;
+      "bench-postgres.json" = lib.mkDefault ./dashboards/bench-postgres.json;
+    };
 
     networking.firewall.allowedTCPPorts = [ 9090 ];
 
@@ -236,7 +309,7 @@ in
             folder = "Bench";
             allowUiUpdates = false;
             options = {
-              path = cfg.dashboards;
+              path = dashboardDirectory;
               foldersFromFilesStructure = false;
             };
           }

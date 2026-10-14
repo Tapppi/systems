@@ -68,4 +68,6 @@ nix build .#nixosConfigurations.example.config.system.build.toplevel \
 
 Use the actual worktree path when checkouts are nested. Publish a reviewed immutable library revision
 before updating the consumer's lock. A local path override is a development input, not a release.
-See [deployment ownership](docs/deploys.md) and [Darwin modules](modules/darwin/README.md).
+See [development and troubleshooting](docs/development.md), [repository conventions](docs/conventions.md),
+[deployment ownership](docs/deploys.md), [Darwin modules](modules/darwin/README.md) and
+[overlay constraints](overlays/README.md).

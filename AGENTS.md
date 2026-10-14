@@ -1,34 +1,34 @@
 # Agent guide — systems
 
-This is the public Nix module library. Read [README](README.md) for exported interfaces and examples.
-Real host compositions, fleet identities, topology, disk identifiers and access grants belong in the private
-consumer. Keep public modules usable with synthetic inputs and no private repository dependency.
+Read [README](README.md) for interfaces and documentation, then the relevant module guide.
+[Development](docs/development.md), [conventions](docs/conventions.md) and
+[deployment ownership](docs/deploys.md) are the canonical instructions for all contributors.
+Load references as needed; read [flakes/nvim/AGENTS.md](flakes/nvim/AGENTS.md) before editor changes
+and [Hammerspoon](modules/darwin/hammerspoon/README.md) before changing its configuration.
 
-## Working and verification
+- Work in a worktree under `.claude/worktrees/` on an `agent/<topic>` branch based on local HEAD.
+  Never edit the main checkout: a consumer may activate its current files, and out-of-store Lua can be live.
+  A helper needing isolation branches from the current worktree, not the main checkout.
+- Load `ikeh-git:git-workflows` before commits, pushes, merges, PRs or deployment; default to PR with user review.
+  Preserve other sessions' changes and stage/commit only owned paths explicitly.
+- Follow the development checks before publication. Build checks and guest activation tests are distinct evidence.
+- Real-host activation requires explicit authorization; Darwin activation and rollback on the real workstation
+  are owner steps. Activation inside an isolated test VM is authorized; follow the guest boundary in
+  [deployment ownership](docs/deploys.md). Never bypass a guard that cannot distinguish that guest.
+- No package/runtime/Brew ownership change or Nix-distribution transition is implicit in a module edit.
+  Never change live builder configuration or cache trust merely to make a test pass.
 
-- Work in a worktree under `.claude/worktrees/` on an `agent/<topic>` branch, based on local HEAD.
-- Load `ikeh-git:git-workflows` before committing, publishing or opening a PR; default to PR with user review.
-- Other sessions may own changes: stage and commit only your files with explicit paths. Never change the main checkout.
-- New files must be staged before Git-flake evaluation can see them.
-- Required checks are `nix flake check` and `nix build` for every affected example, host and image. Build never activates.
-- Never activate Darwin, run a system closure's activate script, or deploy a host without explicit authorization.
-- Keep main and fresh-tool pins separate. No package/runtime/Brew migration or Nix-distribution transition is implicit in a module edit.
-- Use nixfmt for Nix, StyLua for Lua and the repository EditorConfig. Preserve portable BSD/GNU behavior in bootstrap scripts.
-- Do not add credentials, personal instance bindings or private closure publication to this repository.
+## Enforcement
 
-The on-demand nix-rosetta-builder configured by the Darwin workstation supports aarch64-linux and
-x86_64-linux builds. It starts automatically when needed; a transient platform mismatch during VM recreation
-can be retried. Linux outputs require a compatible Linux builder. Firmware/image derivations may require
-the builder to advertise the `kvm` system feature; QEMU can fall back to slower software emulation when
-KVM acceleration is unavailable. Never change live builder configuration merely to make a test pass.
-Capture failed exit codes rather than piping them away.
+[`.claude/settings.json`](.claude/settings.json) configures the git/worktree plugin and activation hook.
+The git skill owns the full guard rules. Here, it forbids whole-tree staging in the main checkout and rebasing
+main; the push guard permits only the configured `agent/` branch/worktree flow to origin without another prompt.
+Other pushes prompt. Keep `main` and `master` out of branch names: the ask floor matches those words in push text.
+Configured plugin enablement does not install the plugin; these rules apply even when a harness lacks its hooks.
 
-The Darwin workstation preserves Determinate Nix accommodations and the narrow Home Manager ownership.
-The composition owns user identity and stateVersion; child modules may add files without redefining the
-host-wide Home Manager settings. Read [Hammerspoon](modules/darwin/hammerspoon/README.md) before editing it:
-its Lua is loaded out of the store, so the Lua flake check is essential and main-checkout Lua edits affect a
-running app. Do not edit that live checkout during development.
-
-Read [flakes/nvim/AGENTS.md](flakes/nvim/AGENTS.md) before editor changes. `.claude/hooks/deploy-guard.sh`
-retains the activation guard; run its fixture test when changing the guard. Existing publication and worktree
-hooks remain binding whether or not a harness invokes them.
+[deploy-guard.sh](.claude/hooks/deploy-guard.sh) conservatively scans command text, including commands inside
+SSH or shell wrappers. It denies Darwin activation, rollback and closure activation scripts and legacy starter
+activation paths, and asks about NixOS switch/boot/test. It cannot recognize isolated guests. Pure read-only
+calls have a narrow exemption; unparseable activation calls ask. A commit message naming an activation command
+can also trigger it: pass message text through a file with `git commit -F`.
+Run [deploy-guard-test.sh](.claude/hooks/deploy-guard-test.sh) after changing the guard.

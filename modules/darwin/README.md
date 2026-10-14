@@ -26,8 +26,12 @@ The [Home Manager file settings](../home-manager/workstation-files.nix) are also
 `homeManagerModules.workstationFiles`. They suppress automatically generated font, cache, state, application and
 manual files. The consuming host owns `home.stateVersion`. Child modules contribute only their own files and services.
 
-## Starter references
+`useUserPackages` keeps Home Manager's profile under `/etc/profiles/per-user` rather than managing
+`~/.nix-profile`. Child modules must not redefine the configured user, state version, shared Home Manager
+settings or backup policy. The workstation sets `nix.enable = false` for Determinate Nix and writes daemon
+settings through `nix.custom.conf`; changing Nix distribution or ownership requires its own reviewed design.
 
-`casks.nix`, `dock/`, `files.nix`, `home-manager.nix` and `packages.nix` are uninstantiated upstream examples for the
-macos-setup migration. Their sample account is `demo`; `home-manager.nix` pins `home.stateVersion = "25.05"` and
-must be reconciled with a consuming host's settings before use.
+## Design references
+
+The [Darwin starter references](../../references/darwin-starter/README.md) are uninstantiated inputs to M2's
+workstation design. They are outside the live module tree and must be retired when M2 is finalized.
