@@ -341,9 +341,9 @@ What the two ikeh-git guards let through and refuse is in the skill and its
 this repository's part of it:
 
 - **ikeh-git's worktree guard** denies whole-tree staging in the main checkout and any rebase of `main`.
-- **ikeh-git's push guard** pre-approves pushing an `agent/` branch to `origin` from a linked worktree (`pushGuard`
-  in `.claude/settings.json`, with `requireWorktree` on). Every other push prompts, any push from the main checkout
-  included. Push only when the flow calls for it.
+- **ikeh-git's push guard** opts in for `agent/` branches pushed to `origin` from a linked worktree (`pushGuard` in
+  `.claude/settings.json`, with `requireWorktree` on); from the main checkout the guard gives no verdict and the
+  session's own rules decide. Push only when the flow calls for it.
 - **`.claude/hooks/deploy-guard.sh`**, this repository's own hook, denies darwin activation (the build-switch and
   rollback apps, `darwin-rebuild` switch, activate, rollback and generation selection, and any `activate` script),
   denies the upstream starter's linux apps and its `apply` script, and asks the user to approve every
