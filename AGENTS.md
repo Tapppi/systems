@@ -20,10 +20,13 @@ and [Hammerspoon](modules/darwin/hammerspoon/README.md) before changing its conf
 
 ## Enforcement
 
-[`.claude/settings.json`](.claude/settings.json) configures the git/worktree plugin and activation hook.
-The git skill owns the full guard rules. Here, it forbids whole-tree staging in the main checkout and rebasing
-main; the push guard permits only the configured `agent/` branch/worktree flow to origin without another prompt.
-Other pushes prompt. Keep `main` and `master` out of branch names: the ask floor matches those words in push text.
+[`.claude/settings.json`](.claude/settings.json), [`.codex/config.toml`](.codex/config.toml),
+[`opencode.json`](opencode.json) and [`.pi/settings.json`](.pi/settings.json) enable the git/worktree plugin
+for their respective harnesses. The git skill owns the full guard rules and each harness's supported behavior.
+The worktree guard forbids whole-tree staging in the main checkout and rebasing main. The repository opts in
+for `agent/` branches pushed to origin from a linked worktree; from the main checkout the push guard gives
+no verdict and the session's own rules decide. Push only when the selected flow calls for it.
+Keep `main` and `master` out of branch names: the ask floor matches those words in push text.
 Configured plugin enablement does not install the plugin; these rules apply even when a harness lacks its hooks.
 
 [deploy-guard.sh](.claude/hooks/deploy-guard.sh) conservatively scans command text, including commands inside
