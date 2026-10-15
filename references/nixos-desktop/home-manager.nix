@@ -3,8 +3,8 @@
 let
   user = "demo";
   xdg_configHome  = "/home/${user}/.config";
-  shared-programs = import ../shared/programs.nix { inherit config pkgs lib; };
-  shared-files = import ../shared/files.nix { inherit config pkgs; };
+  shared-programs = import ../shared-desktop/programs.nix { inherit config pkgs lib; };
+  shared-files = import ../shared-desktop/files.nix { inherit config pkgs; };
 
   polybar-user_modules = builtins.readFile (pkgs.substituteAll {
     src = ./config/polybar/user_modules.ini;
@@ -28,7 +28,7 @@ let
 in
 {
   imports = [
-    ../shared/home-manager.nix
+    ../shared-desktop/home-manager.nix
   ];
 
   home = {

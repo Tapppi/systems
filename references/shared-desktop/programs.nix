@@ -76,7 +76,7 @@ let name = "Example User";
     };
   };
 
-  # Neovim is configured via nixCats in modules/shared/home-manager.nix
+  # Neovim is configured via nixCats in references/shared-desktop/home-manager.nix
 
   alacritty = {
     enable = true;

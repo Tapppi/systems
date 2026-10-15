@@ -1,7 +1,7 @@
 { pkgs }:
 
 with pkgs;
-let shared-packages = import ../shared/packages.nix { inherit pkgs; }; in
+let shared-packages = import ../shared-desktop/packages.nix { inherit pkgs; }; in
 shared-packages ++ [
 
   # Security and authentication

@@ -33,5 +33,6 @@ settings through `nix.custom.conf`; changing Nix distribution or ownership requi
 
 ## Design references
 
-The [Darwin starter references](../../references/darwin-starter/README.md) are uninstantiated inputs to M2's
-workstation design. They are outside the live module tree and must be retired when M2 is finalized.
+The [Darwin starter references](../../references/darwin-starter/README.md) contain uninstantiated workstation
+composition examples for design comparison. They are separate from the exported modules and have no buildable
+flake configuration.

@@ -19,7 +19,7 @@ Real-host activation requires explicit authorization; Darwin activation on the r
 owner step. A VM used as a production host, or the existing build VM, is not a disposable test target.
 Build success and guest boot/activation success are separate claims.
 
-Actual guest setups belong to M2/M3. The test boundary must identify a disposable guest and its disks,
+The test boundary must identify a disposable guest and its disks,
 keep activation inside it, and prevent writable host mounts or real fleet credentials from turning a guest
 test into a host change. A sandbox can request a narrowly scoped host-side VM operation; it must not acquire
 an unrestricted host shell or assume a Linux development guest can provide macOS virtualization.
@@ -34,6 +34,6 @@ demonstrates the Apple Silicon host and restore-image boundary. These capabiliti
 repository guest setup.
 
 The current [activation guard](../.claude/hooks/deploy-guard.sh) matches command text and cannot distinguish
-guest activation from host activation. It must not be bypassed. M2's test setup needs a guest-bound launcher
-and guard fixtures proving isolation and continued denial of real-host activation. This is engineering work
-to implement the authorized test boundary, not another approval requirement for isolated guest activation.
+guest activation from host activation. The repository provides no guest-bound launcher that satisfies this
+guard. Do not bypass the guard or treat the isolated-guest permission as a working activation procedure.
+Build checks remain available through the documented flake outputs.

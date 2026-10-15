@@ -9,6 +9,18 @@ links those sources and adds only agent workflow rules. Explain unusual composit
 where they are needed for safe edits. Put real hardware and instance rationale in the private consumer, retaining
 enough composing commentary in both the public example and private host to explain their shared requirements.
 
+## Standing documentation, designs and plans
+
+README, module guides, code comments and operational documentation describe the configuration and interfaces
+that exist. They explain durable constraints without depending on milestone names, delivery dates or a plan's
+sequence. Identify an accepted preliminary design or design goal explicitly; do not describe it as implemented.
+
+Implementation plans link to the relevant code and standing documentation and own sequencing, acceptance work,
+retirement decisions and deferred scope. When a target design differs substantially from current behavior,
+keep that comparison in a reference file beside the plan. The plan owner updates that reference as evidence
+changes. Standing docs remain independently usable and do not send readers to a milestone to understand a
+current capability or limitation. Record how decisions changed in the issue log or commit history.
+
 ## Style
 
 Follow [EditorConfig](../.editorconfig): UTF-8, LF, final newline, two-space indentation and a 120-column limit.

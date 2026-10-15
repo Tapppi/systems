@@ -24,12 +24,7 @@ kernel, disk and network constraints needed when adapting a host. The service mo
 
 ## Desktop reference files
 
-The root-level `home-manager.nix`, `packages.nix`, `files.nix`, `disk-config.nix` and `config/` contain
-uninstantiated desktop references. They are not imported by the exported server profiles or examples.
+The [NixOS desktop references](../../references/nixos-desktop/README.md) contain Home Manager,
+package, generated-file and disk-layout examples outside the exported server profiles.
+They require adaptation and verification before use; server build evidence does not validate a desktop.
 There is no root `modules/nixos/default.nix`; follow the flake's explicit exports to find a live composition.
-
-[home-manager.nix](home-manager.nix) composes the shared desktop programs, packages and generated files.
-[packages.nix](packages.nix) returns a list, [files.nix](files.nix) returns Home Manager file definitions,
-and [disk-config.nix](disk-config.nix) is a disko layout with a placeholder device.
-These files need their own adaptation and verification before use; current server build evidence does not
-validate a desktop configuration. See [shared configuration](../shared/README.md) for their common inputs.
