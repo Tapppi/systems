@@ -1,0 +1,4 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["{env:HOME}/.claude/plugins/cache/ikeh/ikeh-git/0.2.0/harness/opencode/plugin.js"]
+}
