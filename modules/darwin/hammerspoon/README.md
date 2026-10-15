@@ -168,7 +168,7 @@ would split one target list across two processes. **Finicky is deferred**, toget
 unshortening and domain matching: all need client-identifying data that belongs in the private `kone` repo, not here.
 
 `local.browsers.targets` — `{ key, label, bundle, profileDir }` — generates both the picker rows and the hotkeys. It
-stores the on-disk profile **directory**; display names are read from the browser's `Local State` at runtime, which is
+defaults to Safari. A host may supply its own targets, which store the on-disk profile **directory**; display names are read from the browser's `Local State` at runtime, which is
 what keeps client names out of this public repo.
 
 **Launching is `open -n -a <browser> --args --profile-directory=<dir> <url>`**, argv via `hs.task`. `-n` is mandatory:
@@ -251,9 +251,9 @@ counts as a mismatch**: on the first switch the running instance never loaded `h
 exactly the run that must restart. That one verdict gates the reload and the handler claim. The restart re-asserts
 `MJConfigFile` after the kill, since a terminating app can flush a stale cached value back.
 
-**`luaDir` defaults to the main checkout, so git operations there are deploys.** That is deliberate: experiments in the
-main checkout run live, and work belongs in a worktree. Any `*.lua` write reloads the running config — a `checkout`,
-`stash` or rebase included — and checking out a tree without the module leaves the hotkeys gone until a manual reload.
-Worktree edits do not reload. Activating an unmerged branch needs `local.hammerspoon.luaDir` overridden; activation
+**`local.hammerspoon.luaDir` is a required host binding to the live checkout.** It accepts an absolute path containing
+letters, digits, `_`, `.`, `/` and `-`. Any `*.lua` write there reloads the running config — a `checkout`, `stash` or
+rebase included — and checking out a tree without the module leaves the hotkeys gone until a manual reload. Work
+belongs in a worktree outside that path. Activating an unmerged branch needs the binding overridden; activation
 checks the directory exists and otherwise leaves the running instance alone, since nix cannot see a missing
 out-of-store target.

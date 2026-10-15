@@ -1,15 +1,12 @@
-## Shared
-Much of the code running on MacOS or NixOS is actually found here.
+# Shared configuration
 
-This configuration gets imported by both modules. Some configuration examples include `git`, `zsh`, `vim`, and `tmux`.
+[default.nix](default.nix) supplies nixpkgs policy and imports the repository's overlays.
+The N150, combined T2 and Incus guest profiles import it explicitly. The Darwin workstation manages its
+package set independently; directory placement does not make a file part of every platform's configuration.
+See the [overlay constraints](../../overlays/README.md) before changing package scope.
 
-## Layout
-```
-.
-├── config             # Config files not written in Nix
-├── default.nix        # Defines how we import overlays 
-├── files.nix          # Non-Nix, static configuration files (now immutable!)
-├── home-manager.nix   # The goods; most all shared config lives here
-├── packages.nix       # List of packages to share
-
-```
+The inactive [shared desktop references](../../references/shared-desktop/README.md) supply Home Manager
+settings for the [NixOS desktop](../../references/nixos-desktop/README.md) and
+[Darwin starter](../../references/darwin-starter/README.md) references. For active editor work, start with the
+[Neovim flake](../../flakes/nvim/README.md); for package ownership, follow the
+[repository conventions](../../docs/conventions.md#module-and-package-changes).

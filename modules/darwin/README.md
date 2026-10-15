@@ -1,42 +1,38 @@
 # Darwin modules
 
-Two sets live here, and the distinction matters more than the layout.
+`darwinModules.workstation` is the reusable Darwin workstation module. It provides the Linux builder, Neovim and
+Neovide, coding-agent tools, session archival, Hammerspoon and the Determinate Nix accommodations. Use the flake's
+`lib.mkDarwin` helper to supply the pinned Home Manager and nix-rosetta-builder dependency modules.
 
-## Active on `asterix`
+The consuming host supplies `local.workstation.user`, `local.workstation.home`, its native `networking` names,
+`home-manager.users.<user>.home.stateVersion`, and `local.hammerspoon.luaDir`. User names accept lowercase account
+characters; home and Lua directory paths must be absolute and contain only letters, digits, `_`, `.`, `/` and `-`.
+This keeps the existing activation script interpolation safe. The public browser target is Safari; hosts configure
+personal targets through `local.browsers.targets`. Set `local.sessionSync.archiveHost` to the archive's SSH host or
+alias; its default is the inert example `archive.example.invalid`.
 
-Imported by `hosts/darwin-minimal/`. Changing these changes a real machine.
+## Workstation modules
 
-```text
-.
-├── session-sync.nix      # launchd agent mirroring ~/.claude/ to the homelab archive
-├── herdr.nix             # the agent multiplexer, and its generated config
-├── codex.nix             # Codex from nixpkgs-fresh, plus its system defaults in /etc/codex/config.toml
-├── agent-reaper/         # launchd agent reaping idle codex-companion brokers and orphaned MCP servers
-├── opencode.nix          # OpenCode from nixpkgs-fresh; its config stays with the dotfiles repo
-├── pi-coding-agent.nix   # pi from nixpkgs-fresh
-└── hammerspoon/          # the Hammerspoon app and its config — read its README first
-```
+- `workstation.nix`: shared system packages, Home Manager wiring, builder and Determinate Nix settings.
+- `session-sync.nix`: launchd agent mirroring `~/.claude/` to a write-only archive.
+- `herdr.nix`: the agent multiplexer and its generated config.
+- `codex.nix`: Codex from nixpkgs-fresh, with defaults in `/etc/codex/config.toml`.
+- `agent-reaper/`: launchd agent reaping idle companion brokers and orphaned MCP servers.
+- `opencode.nix`, `devenv.nix`, `pi-coding-agent.nix`: packages from nixpkgs-fresh.
+- [Hammerspoon](hammerspoon/README.md): the application, configuration, link routing and hotkeys.
 
-They contribute host-level configuration — `environment.systemPackages`, activation scripts, launchd agents — and, in
-`hammerspoon/`'s case, `home.file` entries. None of them sets host-wide home-manager settings: `stateVersion`,
-`users.users` and the `useGlobalPkgs`/`useUserPackages`/`backupFileExtension` options belong to
-`hosts/darwin-minimal/default.nix`, because a second module setting any of them would collide on a non-mergeable
-option.
+The workstation owns `useGlobalPkgs`, `useUserPackages`, `backupFileExtension` and the configured user's home.
+The [Home Manager file settings](../home-manager/workstation-files.nix) are also exported as
+`homeManagerModules.workstationFiles`. They suppress automatically generated font, cache, state, application and
+manual files. The consuming host owns `home.stateVersion`. Child modules contribute only their own files and services.
 
-## Unused upstream starter
+`useUserPackages` keeps Home Manager's profile under `/etc/profiles/per-user` rather than managing
+`~/.nix-profile`. Child modules must not redefine the configured user, state version, shared Home Manager
+settings or backup policy. The workstation sets `nix.enable = false` for Determinate Nix and writes daemon
+settings through `nix.custom.conf`; changing Nix distribution or ownership requires its own reviewed design.
 
-Imported only by `hosts/darwin/`, which is never instantiated in `flake.nix` and has no buildable configuration. Kept
-as the worked reference for the `macos-setup` migration; per ADR-002 it goes away once `systems` becomes a module
-library.
+## Design references
 
-```text
-.
-├── casks.nix          # List of homebrew casks
-├── dock/              # macOS dock configuration
-├── files.nix          # Non-Nix, static configuration files
-├── home-manager.nix   # Defines user programs, the homebrew block, and the dock entries
-└── packages.nix       # List of packages to install for macOS
-```
-
-Note these still pin `home.stateVersion = "25.05"`; importing one onto `asterix` without reconciling that against the
-host's value will fail evaluation.
+The [Darwin starter references](../../references/darwin-starter/README.md) contain uninstantiated workstation
+composition examples for design comparison. They are separate from the exported modules and have no buildable
+flake configuration.

@@ -18,10 +18,10 @@
 # disk, so resume still works. See reaper.sh for what counts as idle.
 #
 # Run `agent-reaper --dry-run` to see what a pass would do.
-{ pkgs, ... }:
+{ config, pkgs, ... }:
 
 let
-  home = "/Users/tapani";
+  home = config.local.workstation.home;
 
   agent-reaper = pkgs.writeShellApplication {
     name = "agent-reaper";

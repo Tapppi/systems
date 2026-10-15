@@ -5,8 +5,7 @@
 { config, pkgs, lib, ... }:
 
 let
-  user = "tapani";
-  home = "/Users/${user}";
+  inherit (config.local.workstation) user home;
   cfgDir = "${home}/.config/hammerspoon";
 
   hammerspoon = pkgs.callPackage ./package.nix { };
@@ -151,16 +150,14 @@ let
 in
 {
   options.local.hammerspoon.luaDir = lib.mkOption {
-    type = lib.types.str;
-    default = "${home}/project/github/tapppi/systems/modules/darwin/hammerspoon/lua";
+    type = lib.types.strMatching "/[A-Za-z0-9_./-]+";
     description = ''
       Absolute path to the live, hand-edited Lua directory, symlinked out of
       the store so edits apply without a rebuild.
 
-      Defaults to the MAIN checkout: the running config should follow reviewed
-      code, not whatever branch is checked out. Note the consequence — the
-      reload watcher fires on any *.lua write there, so ordinary git
-      operations in that tree are live deploys of this config.
+      Set this in the host composition to the intended live checkout, using
+      shell-safe path characters. The reload watcher fires on any *.lua write
+      there, so ordinary git operations in that tree are live deploys.
 
       It is a plain string with no store context, so nix cannot verify it: a
       wrong or missing path builds cleanly and fails only at runtime, which is
@@ -205,21 +202,8 @@ in
     default = [
       {
         key = "b";
-        label = "Personal";
-        bundle = "com.brave.Browser";
-        profileDir = "Default";
-      }
-      {
-        key = "v";
-        label = "Company";
-        bundle = "com.google.Chrome";
-        profileDir = "Profile 1";
-      }
-      {
-        key = "c";
-        label = "Client";
-        bundle = "com.google.Chrome";
-        profileDir = "Profile 2";
+        label = "Safari";
+        bundle = "com.apple.Safari";
       }
     ];
     description = ''
