@@ -12,9 +12,9 @@
 # bumped too.
 { pkgs, inputs, ... }:
 
-let
-  devenv = inputs.nixpkgs-fresh.legacyPackages.${pkgs.stdenv.hostPlatform.system}.devenv;
-in
 {
-  environment.systemPackages = [ devenv ];
+  environment.systemPackages = import ../../packages/harnesses.nix {
+    pkgsFresh = inputs.nixpkgs-fresh.legacyPackages.${pkgs.stdenv.hostPlatform.system};
+    names = [ "devenv" ];
+  };
 }

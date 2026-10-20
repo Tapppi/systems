@@ -11,103 +11,40 @@
 # `herdr channel set` cannot replace it. The flake update above is the upgrade
 # path; the config below turns off the background check that would otherwise
 # advertise versions this host has no way to install.
-{ config, pkgs, lib, inputs, ... }:
+{
+  config,
+  pkgs,
+  lib,
+  inputs,
+  ...
+}:
 
 let
   inherit (config.local.workstation) user home;
 
-  herdr = inputs.nixpkgs-fresh.legacyPackages.${pkgs.stdenv.hostPlatform.system}.herdr;
-
-  # One herdr session per tmux session, so each tmuxinator project keeps its own
-  # set of agents and reattaches to them.
-  herdr-win = pkgs.writeShellApplication {
-    name = "herdr-win";
-    runtimeInputs = [ herdr ];
-    text = ''
-      # herdr-win              attach this tmux session's herdr session locally
-      # herdr-win build-host   attach it on build-host, over SSH
-      #
-      # --session both creates and attaches, so there is nothing to provision
-      # before the first run. --remote keeps the client local and only the
-      # server remote, which is what preserves clipboard and image paste.
-      host="''${1:-}"
-
-      if [ -n "''${TMUX:-}" ]; then
-        session="$(tmux display-message -p '#S')"
-      else
-        session="''${HERDR_SESSION:-default}"
-      fi
-
-      # Detaching with prefix+q returns here rather than letting the window's
-      # command exit, which would close the tmux window and take any other pane
-      # in it along.
-      while true; do
-        if [ -n "$host" ]; then
-          herdr --remote "$host" --session "$session" || true
-        else
-          herdr --session "$session" || true
-        fi
-
-        printf '\n[herdr-win] detached from %s%s\n' "''${host:+$host:}" "$session"
-        printf 'press q to close this window, any other key to reattach: '
-        read -r -n 1 key || key=q
-        printf '\n'
-        if [ "$key" = q ]; then
-          break
-        fi
-      done
-    '';
+  pkgsFresh = inputs.nixpkgs-fresh.legacyPackages.${pkgs.stdenv.hostPlatform.system};
+  herdr = builtins.head (
+    import ../../packages/harnesses.nix {
+      inherit pkgsFresh;
+      names = [ "herdr" ];
+    }
+  );
+  herdr-win = import ../../packages/herdr-win.nix { inherit pkgs herdr; };
+  settings = lib.recursiveUpdate (import ../shared/herdr/settings.nix) {
+    # System delivery is visible while unfocused; tmux does not forward Herdr's OSC notifications.
+    ui.toast.delivery = "system";
   };
+  herdrConfig = (pkgs.formats.toml { }).generate "herdr-config.toml" settings;
 
-  herdrConfig = pkgs.writeText "herdr-config.toml" ''
-    # Managed by systems/modules/darwin/herdr.nix. Edits here are replaced on the
-    # next build-switch.
-
-    onboarding = false
-
-    [update]
-    # The binary comes from the nix store and cannot rewrite itself, so a
-    # background check can only ever report an update that `herdr update` will
-    # fail to apply.
-    version_check = false
-
-    # Deliberately left on: this fetches agent-detection manifests, not binaries.
-    # Claude Code, Codex and Cursor report session identity to herdr and nothing
-    # else, so their working/blocked/idle state is read from these manifests —
-    # a stale set is exactly what makes the agents sidebar wrong for those three.
-    manifest_check = true
-
-    [ui]
-    # A distinct static shape per agent state — blocked, working, done, idle,
-    # unknown — rather than one dot recoloured, so the sidebar stays readable
-    # without relying on hue. The key arrived in 0.8.2; on 0.8.0 herdr did not
-    # merely ignore it but pinned an unknown-key warning in the corner of the
-    # UI, so `nixpkgs-fresh` must stay at or above 0.8.2 for this line.
-    status_indicators = "symbols"
-
-    # Name the detected agent in split pane borders when the pane has no manual
-    # name, so a split is identifiable without focusing it.
-    show_agent_labels_on_pane_borders = true
-
-    [ui.toast]
-    # Route notifications to the macOS notification centre instead of drawing
-    # them inside herdr, which is the only delivery that is visible when herdr
-    # is not the focused window.
-    #
-    # "terminal" — hand the sequence to the outer terminal and let it post the
-    # notification — is not an option while herdr runs inside tmux, which is
-    # always, since herdr-win launches it in a tmux window. herdr emits OSC 9
-    # and OSC 99 unwrapped, and tmux forwards neither: it has no OSC 99 case at
-    # all, and its OSC 9 handler returns early on anything that is not 9;4, the
-    # progress bar. Ghostty would render either one; nothing reaches it.
-    delivery = "system"
-  '';
 in
 {
-  environment.systemPackages = [ herdr herdr-win ];
+  environment.systemPackages = [
+    herdr
+    herdr-win
+  ];
 
-  # herdr reads one fixed path and takes no config-path flag or environment
-  # override, so the store copy has to be linked into place. Activation runs as
+  # Link the default config path while keeping sibling runtime state writable.
+  # Activation runs as
   # root — nix-darwin removed the per-user activation scripts — hence the
   # explicit ownership on the directory and on the symlink itself.
   system.activationScripts.postActivation.text = lib.mkAfter ''

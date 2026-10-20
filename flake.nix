@@ -80,7 +80,12 @@
           modules = [ home-manager.darwinModules.home-manager inputs.nix-rosetta-builder.darwinModules.default ] ++ modules;
         };
     in {
-      lib = { inherit mkNixos mkDarwin; };
+      lib = {
+        inherit mkNixos mkDarwin;
+        userPackages = import ./packages/user-base.nix;
+        harnessPackages = import ./packages/harnesses.nix;
+        mkHerdrWin = import ./packages/herdr-win.nix;
+      };
       nixosModules = {
         intel-n150 = ./modules/nixos/intel-n150;
         apple-t2 = ./modules/nixos/apple-t2;
@@ -107,7 +112,11 @@
         devenv = ./modules/darwin/devenv.nix;
         pi-coding-agent = ./modules/darwin/pi-coding-agent.nix;
       };
-      homeManagerModules.workstationFiles = ./modules/home-manager/workstation-files.nix;
+      homeManagerModules = {
+        workstationFiles = ./modules/home-manager/workstation-files.nix;
+        portableUser = ./modules/home-manager/portable-user.nix;
+        herdr = ./modules/home-manager/herdr.nix;
+      };
       devShells = forAllSystems (system: {
         default = nixpkgs.legacyPackages.${system}.mkShell {
           nativeBuildInputs = with nixpkgs.legacyPackages.${system}; [ bashInteractive git ];
@@ -116,6 +125,7 @@
       checks = forAllSystems (system:
         let pkgs = nixpkgs.legacyPackages.${system};
         in {
+          portable-user = import ./tests/portable-user.nix { inherit self inputs system pkgs; };
           bench-observability = import ./modules/nixos/services/bench-obs/tests/check.nix {
             inherit nixpkgs pkgs;
           };

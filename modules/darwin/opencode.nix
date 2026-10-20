@@ -10,9 +10,9 @@
 # rsync, which preserves runtime state. This module adds no competing writer.
 { pkgs, inputs, ... }:
 
-let
-  opencode = inputs.nixpkgs-fresh.legacyPackages.${pkgs.stdenv.hostPlatform.system}.opencode;
-in
 {
-  environment.systemPackages = [ opencode ];
+  environment.systemPackages = import ../../packages/harnesses.nix {
+    pkgsFresh = inputs.nixpkgs-fresh.legacyPackages.${pkgs.stdenv.hostPlatform.system};
+    names = [ "opencode" ];
+  };
 }
