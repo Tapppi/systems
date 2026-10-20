@@ -15,7 +15,8 @@ alias; its default is the inert example `archive.example.invalid`.
 
 - `workstation.nix`: shared system packages, Home Manager wiring, builder and Determinate Nix settings.
 - `session-sync.nix`: launchd agent mirroring `~/.claude/` to a write-only archive.
-- `herdr.nix`: the agent multiplexer and its generated config.
+- `herdr.nix`: the agent multiplexer, shared settings/wrapper and Darwin notification/link policy.
+  [Portable Herdr](../../docs/portable-user.md) exposes the common behavior through Home Manager.
 - `codex.nix`: Codex from nixpkgs-fresh, with defaults in `/etc/codex/config.toml`.
 - `agent-reaper/`: launchd agent reaping idle companion brokers and orphaned MCP servers.
 - `opencode.nix`, `devenv.nix`, `pi-coding-agent.nix`: packages from nixpkgs-fresh.

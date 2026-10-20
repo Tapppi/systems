@@ -8,10 +8,9 @@
 # wrapper already sets PI_SKIP_VERSION_CHECK=1 and PI_TELEMETRY=0.
 { pkgs, inputs, ... }:
 
-let
-  pi-coding-agent =
-    inputs.nixpkgs-fresh.legacyPackages.${pkgs.stdenv.hostPlatform.system}.pi-coding-agent;
-in
 {
-  environment.systemPackages = [ pi-coding-agent ];
+  environment.systemPackages = import ../../packages/harnesses.nix {
+    pkgsFresh = inputs.nixpkgs-fresh.legacyPackages.${pkgs.stdenv.hostPlatform.system};
+    names = [ "pi-coding-agent" ];
+  };
 }

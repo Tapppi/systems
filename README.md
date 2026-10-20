@@ -16,6 +16,10 @@ supply its `inputs` to modules. Both accept `system` and `specialArgs`; a consum
 `specialArgs.inputs = systems.inputs // inputs` to add its composing flake's inputs. The Darwin helper
 loads Home Manager and nix-rosetta-builder. Modules can also be imported with the upstream constructors.
 
+[Portable user interfaces](docs/portable-user.md) expose `lib.userPackages`, `lib.harnessPackages` and
+`lib.mkHerdrWin`, plus `homeManagerModules.portableUser` and `homeManagerModules.herdr`.
+They support explicit base/fresh input ownership and opt-in Darwin/Linux user environments.
+
 The main `nixpkgs` pin serves the operating systems, editor and Linux builder. `nixpkgs-fresh` is updated
 separately for fast-moving tools with `nix flake update nixpkgs-fresh`. Keep each consumer's corresponding
 input following the same track. The standalone editor is documented in [flakes/nvim](flakes/nvim/README.md).

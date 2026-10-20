@@ -22,11 +22,11 @@
 # generically named logs_client. Nothing else provides the last one today.
 { pkgs, inputs, ... }:
 
-let
-  codex = inputs.nixpkgs-fresh.legacyPackages.${pkgs.stdenv.hostPlatform.system}.codex;
-in
 {
-  environment.systemPackages = [ codex ];
+  environment.systemPackages = import ../../packages/harnesses.nix {
+    pkgsFresh = inputs.nixpkgs-fresh.legacyPackages.${pkgs.stdenv.hostPlatform.system};
+    names = [ "codex" ];
+  };
 
   environment.etc."codex/config.toml".text = ''
     # Managed by systems/modules/darwin/codex.nix. User settings override these defaults.
