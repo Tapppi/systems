@@ -1,0 +1,12 @@
+pypdf
+pdfplumber
+pdf2image
+pillow
+reportlab
+numpy
+defusedxml
+lxml
+openpyxl
+pandas
+pytesseract
+playwright

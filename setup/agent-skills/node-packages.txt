@@ -1,0 +1,7 @@
+docx@latest
+pptxgenjs@latest
+react@latest
+react-dom@latest
+react-icons@latest
+sharp@latest
+pdf-lib@latest
