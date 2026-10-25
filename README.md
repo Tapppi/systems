@@ -19,6 +19,8 @@ loads Home Manager and nix-rosetta-builder. Modules can also be imported with th
 [Portable user interfaces](docs/portable-user.md) expose `lib.userPackages`, `lib.harnessPackages` and
 `lib.mkHerdrWin`, plus `homeManagerModules.portableUser` and `homeManagerModules.herdr`.
 They support explicit base/fresh input ownership and opt-in Darwin/Linux user environments.
+[Agent-skills setup](docs/agent-skills.md) packages explicit uv/Node launchers for writable document/browser
+environments, with opt-in `homeManagerModules.agentSkills` and `lib.mkAgentSkillsSetup`.
 
 The main `nixpkgs` pin serves the operating systems, editor and Linux builder. `nixpkgs-fresh` is updated
 separately for fast-moving tools with `nix flake update nixpkgs-fresh`. Keep each consumer's corresponding

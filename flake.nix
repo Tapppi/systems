@@ -85,6 +85,7 @@
         userPackages = import ./packages/user-base.nix;
         harnessPackages = import ./packages/harnesses.nix;
         mkHerdrWin = import ./packages/herdr-win.nix;
+        mkAgentSkillsSetup = import ./packages/agent-skills-setup.nix;
       };
       nixosModules = {
         intel-n150 = ./modules/nixos/intel-n150;
@@ -116,7 +117,17 @@
         workstationFiles = ./modules/home-manager/workstation-files.nix;
         portableUser = ./modules/home-manager/portable-user.nix;
         herdr = ./modules/home-manager/herdr.nix;
+        agentSkills = ./modules/home-manager/agent-skills.nix;
       };
+      packages = forAllSystems (system: {
+        agent-skills-setup = self.lib.mkAgentSkillsSetup { pkgs = nixpkgs.legacyPackages.${system}; };
+      });
+      apps = forAllSystems (system: {
+        agent-skills-setup = {
+          type = "app";
+          program = "${self.packages.${system}.agent-skills-setup}/bin/agent-skills-setup";
+        };
+      });
       devShells = forAllSystems (system: {
         default = nixpkgs.legacyPackages.${system}.mkShell {
           nativeBuildInputs = with nixpkgs.legacyPackages.${system}; [ bashInteractive git ];
@@ -125,6 +136,7 @@
       checks = forAllSystems (system:
         let pkgs = nixpkgs.legacyPackages.${system};
         in {
+          agent-skills-setup = import ./tests/agent-skills/check.nix { inherit self inputs system pkgs; };
           portable-user = import ./tests/portable-user.nix { inherit self inputs system pkgs; };
           bench-observability = import ./modules/nixos/services/bench-obs/tests/check.nix {
             inherit nixpkgs pkgs;
