@@ -31,6 +31,31 @@ manual files. The consuming host owns `home.stateVersion`. Child modules contrib
 settings or backup policy. The workstation sets `nix.enable = false` for Determinate Nix and writes daemon
 settings through `nix.custom.conf`; changing Nix distribution or ownership requires its own reviewed design.
 
+## Desktop preferences
+
+`darwinModules.desktopDefaults` is an opt-in native nix-darwin preset. Import it beside `workstation`,
+as the public Darwin example does. It shows hidden files, extensions, paths, status and mounted volumes
+in Finder; uses list view and current-folder search; enables immediate spring loading; and configures
+an automatically hiding Dock with reduced animations, stable Spaces order and visible process indicators.
+The exact settings are in [desktop-defaults.nix](desktop-defaults.nix).
+
+Every value uses `mkDefault`: set individual `system.defaults.finder`, `NSGlobalDomain` or `dock` options
+in the consumer to override it. Set a value to `null` to leave that preference unmanaged. A consumer
+chooses its own Finder start folder with `system.defaults.finder.NewWindowTarget` and, for `Other`,
+`NewWindowTargetPath`. The standalone preset requires the native `system.primaryUser`; `workstation`
+already supplies it. The preset installs no packages and declares no account or Home Manager settings.
+
+nix-darwin writes these preferences as the primary user during activation and restarts that user's Dock.
+Finder may need a relaunch or logout for all settings to appear. The
+[desktop check](tests/desktop-defaults.nix) inspects generated commands, plist types and values without
+executing preference writes; it also checks an absent import and native consumer overrides.
+
+Preference writes persist outside the Nix generation. Removing an import or setting a key to `null`
+does not restore or delete its old value. Before an owner activates this preset on an existing machine,
+capture the prior values and absence of the touched keys and retire each competing writer. Recovery
+must restore those captured values (or delete keys previously absent); changing generations alone is
+insufficient. Building the example does not validate live preferences or graphical behavior.
+
 ## Design references
 
 The [Darwin starter references](../../references/darwin-starter/README.md) contain uninstantiated workstation

@@ -98,6 +98,7 @@
       };
       darwinModules = {
         workstation = ./modules/darwin/workstation.nix;
+        desktopDefaults = ./modules/darwin/desktop-defaults.nix;
         hammerspoon = ./modules/darwin/hammerspoon;
         codex = ./modules/darwin/codex.nix;
         herdr = ./modules/darwin/herdr.nix;
@@ -116,6 +117,10 @@
       checks = forAllSystems (system:
         let pkgs = nixpkgs.legacyPackages.${system};
         in {
+          desktop-defaults = import ./modules/darwin/tests/desktop-defaults.nix {
+            inherit darwin pkgs;
+            desktopModule = self.darwinModules.desktopDefaults;
+          };
           bench-observability = import ./modules/nixos/services/bench-obs/tests/check.nix {
             inherit nixpkgs pkgs;
           };
@@ -177,7 +182,11 @@
         nixos-on-t2 = mkNixos { modules = [ self.nixosModules.apple-t2 inputs.disko.nixosModules.disko ./examples/nixos-on-t2.nix ]; };
       };
       darwinConfigurations.apple-silicon-host = mkDarwin {
-        modules = [ self.darwinModules.workstation ./examples/apple-silicon-host.nix ];
+        modules = [
+          self.darwinModules.workstation
+          self.darwinModules.desktopDefaults
+          ./examples/apple-silicon-host.nix
+        ];
       };
       # Generic builders are selected through exported modules. Fleet ISO names
       # and authorized access keys belong to the composing repository.
