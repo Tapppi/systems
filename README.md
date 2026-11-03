@@ -17,8 +17,9 @@ supply its `inputs` to modules. Both accept `system` and `specialArgs`; a consum
 loads Home Manager and nix-rosetta-builder. Modules can also be imported with the upstream constructors.
 
 The main `nixpkgs` pin serves the operating systems, editor and Linux builder. `nixpkgs-fresh` is updated
-separately for fast-moving tools with `nix flake update nixpkgs-fresh`. Keep each consumer's corresponding
-input following the same track. The standalone editor is documented in [flakes/nvim](flakes/nvim/README.md).
+separately for fast-moving tools with `nix flake update nixpkgs-fresh`; `nixpkgs-opencode` holds OpenCode
+on 1.x until #35. Keep each consumer's corresponding input following the same track. The standalone editor
+is documented in [flakes/nvim](flakes/nvim/README.md).
 
 ## Examples and checks
 

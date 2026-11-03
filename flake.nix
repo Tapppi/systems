@@ -9,6 +9,10 @@
     # herdr ships every week or two and is worth updating far more often than
     # that. Update with `nix flake update nixpkgs-fresh`.
     nixpkgs-fresh.url = "github:nixos/nixpkgs/nixos-unstable";
+    # OpenCode only, held on 1.x: 2.x does not run V1 plugins (ikeh-git's guard
+    # among them). The nixpkgs-fresh revision before 2.x landed, so the package
+    # is already cached. Remove it with the migration, issue #35.
+    nixpkgs-opencode.url = "github:nixos/nixpkgs/e7439b6b14ad3cc35d05608ebca9bce01a25f5f8";
     # Must follow nixpkgs; left bare it pulls in a second one.
     home-manager = {
       url = "github:nix-community/home-manager";
