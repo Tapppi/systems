@@ -1,6 +1,7 @@
-# OpenCode — delivered from nixpkgs-fresh so coding-agent releases can move
-# independently of the main pin, which rebuilds nvim and the Rosetta builder.
-# Upgrade with:
+# OpenCode — held on 1.x from the nixpkgs-opencode input until the move to
+# 2.x (issue #35), because 2.x does not run V1 plugins. After the migration it
+# comes from nixpkgs-fresh again, like the other coding agents, and upgrades
+# with:
 #
 #   nix flake update nixpkgs-fresh && nix run .#build-switch
 #
@@ -11,7 +12,7 @@
 { pkgs, inputs, ... }:
 
 let
-  opencode = inputs.nixpkgs-fresh.legacyPackages.${pkgs.stdenv.hostPlatform.system}.opencode;
+  opencode = inputs.nixpkgs-opencode.legacyPackages.${pkgs.stdenv.hostPlatform.system}.opencode;
 in
 {
   environment.systemPackages = [ opencode ];

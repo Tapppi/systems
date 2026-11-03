@@ -18,7 +18,8 @@ alias; its default is the inert example `archive.example.invalid`.
 - `herdr.nix`: the agent multiplexer and its generated config.
 - `codex.nix`: Codex from nixpkgs-fresh, with defaults in `/etc/codex/config.toml`.
 - `agent-reaper/`: launchd agent reaping idle companion brokers and orphaned MCP servers.
-- `opencode.nix`, `devenv.nix`, `pi-coding-agent.nix`: packages from nixpkgs-fresh.
+- `devenv.nix`, `pi-coding-agent.nix`: packages from nixpkgs-fresh.
+- `opencode.nix`: OpenCode held on 1.x from nixpkgs-opencode until #35.
 - [Hammerspoon](hammerspoon/README.md): the application, configuration, link routing and hotkeys.
 
 The workstation owns `useGlobalPkgs`, `useUserPackages`, `backupFileExtension` and the configured user's home.
